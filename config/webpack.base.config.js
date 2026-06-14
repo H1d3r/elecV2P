@@ -2,7 +2,6 @@ const path = require('path')
 const MiniCssExtractPlugin = require("mini-css-extract-plugin")
 const CssMinimizerPlugin = require("css-minimizer-webpack-plugin")
 const HtmlWebpackPlugin = require('html-webpack-plugin')
-const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 const VueLoaderPlugin = require('vue-loader/lib/plugin')
 const webpack = require('webpack')
 const TerserPlugin = require("terser-webpack-plugin")
@@ -15,17 +14,14 @@ module.exports = {
   },
   output: {
     filename: '[name].[contenthash].js',
-    path: path.join(__dirname, '../web/dist')
+    path: path.join(__dirname, '../web/dist'),
+    clean: true,
   },
   module: {
     rules: [
       {
         test: /\.(png|jpe?g|gif)$/i,
-        use: [
-          {
-            loader: 'file-loader',
-          },
-        ],
+        type: 'asset/resource',
       }, {
         test: /\.(sa|sc|c)ss$/,
         use: [
@@ -65,7 +61,6 @@ module.exports = {
         minifyCSS: true
       }
     }),
-    new CleanWebpackPlugin(),
     new VueLoaderPlugin(),
     new MiniCssExtractPlugin({
       filename: '[name].[contenthash].css'
