@@ -109,7 +109,7 @@ export default {
       this.bIsHide = true
     },
     headerDelete(h){
-      this.$delete(this.header, h)
+      delete this.header[h]
     }
   }
 }

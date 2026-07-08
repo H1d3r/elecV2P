@@ -120,7 +120,7 @@
       </div>
       <div class="setting" :class="{ 'setting--collapsed': collapse.other }" @keydown.ctrl.83.prevent.stop="mergeSave()">
         <h4 class="setting_title">
-          <sapn class="title_main">{{ $ta('default', 'notify', 'setting_of') }}</sapn>
+          <span class="title_main">{{ $ta('default', 'notify', 'setting_of') }}</span>
           <span class="title_collapse" @click="collapse.other=!collapse.other" :class="{ 'title_collapse--collapsed': collapse.other }"></span>
         </h4>
         <div class="setting setting--other">
@@ -157,7 +157,7 @@
       </div>
       <div class="setting setting--vflex" :class="{ 'setting--collapsed': collapse.runjs }" @keydown.ctrl.83.prevent.stop="runjsSave()">
         <h4 class="setting_title">
-          <sapn class="title_main">{{ $ta('script', 'run', 'setting_of') }}</sapn>
+          <span class="title_main">{{ $ta('script', 'run', 'setting_of') }}</span>
           <span class="title_collapse" @click="collapse.runjs=!collapse.runjs" :class="{ 'title_collapse--collapsed': collapse.runjs }"></span>
         </h4>
         <div class="setting--other"><div class="eflex eflex--wrap w100">
@@ -200,12 +200,12 @@
         </div>
       </div><button @click="runjsSave()" class="elecBtn elecBtn--stlong">{{ $t('save') }}</button></div>
       <eAxios :config="CONFIG_Axios" :uagent="uagent" />
-      <webui :menunav="webUI.nav" :theme="webUI.theme" :logo="webUI.logo" v-on="$listeners" />
+      <webui :menunav="webUI.nav" :theme="webUI.theme" :logo="webUI.logo" v-bind="$attrs" />
       <security :config="CONFIG_SECURITY" />
       <env :config="CONFIG_env" />
       <div :class="{ 'setting--collapsed': collapse.init }" class="setting setting--init">
         <h4 class="setting_title">
-          <sapn class="title_main" title="重启后生效">初始化相关设置</sapn>
+          <span class="title_main" title="重启后生效">初始化相关设置</span>
           <span @click="collapse.init=!collapse.init" class="title_collapse" :class="{ 'title_collapse--collapsed': collapse.init }"></span>
         </h4>
         <div class="setting setting--inline" @keydown.ctrl.83.prevent.stop="initSave()">
@@ -496,10 +496,10 @@ export default {
       if (res.data.uagent) {
         for (let ua in res.data.uagent) {
           if (res.data.uagent[ua].name) {
-            this.$set(this.uagent, ua, {
+            this.uagent[ua] = {
               name: res.data.uagent[ua].name,
               header: res.data.uagent[ua].header
-            })
+            }
           }
         }
       }
@@ -877,7 +877,7 @@ export default {
     },
     setLanguage() {
       const clang = setLang(this.lang)
-      this.$forceUpdate()
+      this.lang = this.lang
       return clang
     },
     langSave(){

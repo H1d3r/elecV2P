@@ -140,15 +140,9 @@ export default {
       let subkeys = Object.keys(this.rewritesub)
       let total = this.rewritelists.length, enbnum = this.rewritelists.filter(r=>r.enable).length
       subkeys.forEach(skey=>{
-        if (this.rewritesub[skey].list === undefined) {
-          this.rewritesub[skey].list = []
-        }
         if (this.rewritesub[skey].enable) {
           enbnum += this.rewritesub[skey].list.filter(r=>r.enable).length
           total += this.rewritesub[skey].list.length
-        }
-        if (this.rewritesub[skey].collapse === undefined) {
-          this.rewritesub[skey].collapse = false
         }
       })
       return enbnum + '/' + total + '/' + subkeys.length
@@ -185,6 +179,16 @@ export default {
     this.reInit()
   },
   methods: {
+    rewriteInit(){
+      Object.keys(this.rewritesub).forEach(skey=>{
+        if (this.rewritesub[skey].list === undefined) {
+          this.rewritesub[skey].list = []
+        }
+        if (this.rewritesub[skey].collapse === undefined) {
+          this.rewritesub[skey].collapse = false
+        }
+      })
+    },
     reInit(){
       const hideloading = this.$message.loading('正在获取 rewrite 列表...', 0)
       this.$axios.get('/data?type=rewritelists').then(res=>{
@@ -193,6 +197,7 @@ export default {
           this.rewritelists = res.data.rewrite.list
           this.rewriteCheck = []
           this.rewriteble.enable = res.data.rewrite.enable !== false
+          this.rewriteInit()
           this.dealOldList()
           this.$message.success('成功获取 REWRITE 规则列表', this.rewritestatus)
         } else {
@@ -229,7 +234,7 @@ export default {
           }
         }
       }
-      todelidx.reverse().forEach(idx=>this.$delete(this.rewritelists, idx))
+      todelidx.reverse().forEach(idx=>this.rewritelists.splice(idx, 1))
     },
     reSave(){
       let emptydata = []
@@ -517,13 +522,12 @@ export default {
     rewriteDel(index){
       switch(this.$sType(index)){
       case 'number':
-        this.$delete(this.rewritelists, index)
+        this.rewritelists.splice(index, 1)
         break
       case 'array':
         if (index.length && confirm(`确定删除这 ${index.length} 条规则吗？\n（手动保存后正式生效）`)) {
-          for (let idx of index) {
-            this.rewriteDel(idx)
-          }
+          index.filter(i=>typeof i === 'number').sort((a,b)=>b-a).forEach(idx=>this.rewritelists.splice(idx, 1))
+          index.filter(i=>typeof i === 'string').forEach(idx=>this.rewriteDel(idx))
           this.rewriteCheck = []
         }
         break
@@ -531,7 +535,6 @@ export default {
         let [subuid, idx] = index.split('|')
         if (subuid && idx && this.rewritesublist[subuid]) {
           this.rewritesublist[subuid].splice(Number(idx), 1)
-          this.$forceUpdate()
         }
         break
       default:
@@ -539,7 +542,7 @@ export default {
       }
     },
     rewritesubAdd(rid = this.$uStr.euid()){
-      this.$set(this.rewritesub, rid, {
+      this.rewritesub[rid] = {
         name: this.$ta('rewrite', 'sub') + (Object.keys(this.rewritesub).length + 1),
         resource: '',
         type: 'rewrite',
@@ -551,7 +554,7 @@ export default {
         bkcolor: this.$uStr.randomColor({ max: 200 }),
         collapse: false,
         list: []
-      })
+      }
     },
     rewritesubOp(subuid, op = 'delete'){
       if (op === 'collapse') {
@@ -561,10 +564,9 @@ export default {
         } else {
           this.rewritesublist[subuid] = this.rewritesub[subuid].list
         }
-        this.$forceUpdate()
       } else {
         if (this.rewritesub[subuid] && (this.rewritesub[subuid].list.length === 0 || confirm('确定删除重写订阅：' + this.rewritesub[subuid].name + ' 及其相关规则\n（并不会删除已添加的 MITMHOST/TASK 等）'))) {
-          this.$delete(this.rewritesub, subuid)
+          delete this.rewritesub[subuid]
           this.rewriteCheck = this.rewriteCheck.filter(idx=>!(typeof(idx) === 'string' && idx.startsWith(subuid)))
         }
       }

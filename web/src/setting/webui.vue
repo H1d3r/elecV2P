@@ -1,7 +1,7 @@
 <template>
   <div class="setting setting--vflex" :class="{ 'setting--collapsed': collapse }" @keydown.ctrl.83.prevent.stop="webuiSave()">
     <h4 class="setting_title">
-      <sapn class="title_main">webUI {{ $t('setting_of') }}</sapn>
+      <span class="title_main">webUI {{ $t('setting_of') }}</span>
       <span @click="collapse=!collapse" class="title_collapse" :class="{ 'title_collapse--collapsed': collapse }"></span>
     </h4>
     <div class="border setting setting--inline" v-show="!collapse">
@@ -94,29 +94,37 @@ export default {
   },
   components: { checkbox },
   computed: {
-    menulist(){
-      for (let key of this.navkey) {
-        if (!this.menunav[key]) {
-          this.menunav[key] = Object.create(null)
+    menulist(){ return this.menunav },
+    theme_simple(){ return this.theme.simple },
+    theme_list(){ return this.theme.list || [] },
+  },
+  watch: {
+    menunav: {
+      immediate: true,
+      handler(nav){
+        if (!nav) return
+        for (let key of this.navkey) {
+          if (!nav[key]) {
+            nav[key] = Object.create(null)
+          }
+          if (nav[key].show !== false) {
+            nav[key].show = true
+          }
         }
-        if (this.menunav[key].show !== false) {
-          this.menunav[key].show = true
+      }
+    },
+    theme: {
+      immediate: true,
+      handler(t){
+        if (!t) return
+        if (!t.simple) {
+          t.simple = Object.create(null)
+        }
+        if (!t.list) {
+          t.list = []
         }
       }
-      return this.menunav
-    },
-    theme_simple(){
-      if (!this.theme.simple) {
-        this.theme.simple = Object.create(null)
-      }
-      return this.theme.simple
-    },
-    theme_list(){
-      if (!this.theme.list) {
-        this.theme.list = []
-      }
-      return this.theme.list
-    },
+    }
   },
   methods: {
     webuiSave(){
@@ -156,7 +164,6 @@ export default {
         style: this.theme_simple.style,
       })
       this.$message.success(name, '已保存')
-      this.$forceUpdate()
     },
     themePreview(idx = -1){
       if (idx === -1) {
@@ -178,7 +185,6 @@ export default {
       this.$uApi.getFile({ accept: '.json' }).then(data=>{
         try {
           this.theme_list.push(...JSON.parse(data.content))
-          this.$forceUpdate()
           this.$message.success('常用主题列表导入成功')
         } catch(e) {
           this.$message.error('常用主题列表导入失败', e.message || e)

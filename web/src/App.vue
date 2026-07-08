@@ -1,7 +1,7 @@
 <template>
-  <section class="section" id="app" @click="edelegate($event)">
+  <section class="section app-root" @click="edelegate($event)">
     <hold /> <message /> <evui />
-    <asider class="sider" :class="{ 'sider--collapsed': collapsed, 'sider--mobile': sidermobile }">
+    <aside class="sider" :class="{ 'sider--collapsed': collapsed, 'sider--mobile': sidermobile }">
       <div class="sider_main">
         <div class="logo">
           <a class="logo_a" href="https://github.com/elecV2/elecV2P" target="elecV2PGit">
@@ -22,9 +22,9 @@
       <div class="sider_trigger sider_trigger--mobile" @click="sidermobile=!sidermobile">
         <span>{{ sidermobile ? '☰' : 'X' }}</span>
       </div>
-    </asider>
+    </aside>
     <keep-alive>
-      <panel class="section" :is="currentpanel" @menunav="menunav" @theme="themeApply" />
+      <component :is="currentpanel" @menunav="menunav" @theme="themeApply" />
     </keep-alive>
   </section>
 </template>
@@ -88,6 +88,8 @@ export default {
       this.menulist.about.name    = '简介说明'
       this.menulist.donation.name = '赞助打赏'
     }
+    this.menulist.setting.show = true
+    this.menulist.donation.show = true
     let theme_cache = this.$sJson(this.$uApi.store.get('theme'))
     if (theme_cache) {
       this.themeApply(theme_cache)
@@ -140,11 +142,15 @@ export default {
       let nlist = Object.create(null)
       let bSponsor = this.$uApi.store.getCache('bSponsor')
       for (let nav in this.menulist) {
-        if (nav === 'setting' || (nav === 'donation' && !bSponsor)) {
-          this.menulist[nav].show = true
-          nlist[nav] = this.menulist[nav]
-        } else if (this.menulist[nav].show !== false) {
-          nlist[nav] = this.menulist[nav]
+        let item = this.menulist[nav]
+        if (nav === 'setting') {
+          nlist[nav] = item
+        } else if (nav === 'donation') {
+          if (!bSponsor) {
+            nlist[nav] = item
+          }
+        } else if (item.show !== false) {
+          nlist[nav] = item
         }
       }
       return nlist
@@ -234,7 +240,7 @@ export default {
             theme_css += `background: ${ theme.appbk };`
           }
           if (theme_css) {
-            theme_css = `#app{${ theme_css }}`
+            theme_css = `.app-root{${ theme_css }}`
           }
           if (theme.style) {
             theme_css += theme.style
@@ -423,5 +429,7 @@ export default {
   display: block;
   background: var(--main-bk);
 }
+
 }
 </style>
+

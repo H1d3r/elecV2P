@@ -119,7 +119,7 @@
           }
           if (this.subprocess[ms.data]) {
             console.debug('exit subprocess:', ms.data, 'command:', this.subprocess[ms.data].command)
-            this.$delete(this.subprocess, ms.data)
+            delete this.subprocess[ms.data]
           } else {
             console.debug('subprocess: ' + ms.data + ' not exist yet')
           }
@@ -131,13 +131,13 @@
             // 子交互命令输入框延迟显示
             // 原因：有些命令不需要交互
             this.subDelaySend[id] = null
-            this.$set(this.subprocess, id, {
+            this.subprocess[id] = {
               command: command,
               history: {
                 current: -1,
                 lists: []
               }
-            })
+            }
           }, 800)
           break
         case 'elecV2Pstatus':
@@ -248,7 +248,7 @@
           type: 'sub',
           data: 'exit',
         })
-        this.$delete(this.subprocess, commandid)
+        delete this.subprocess[commandid]
       },
       hiupdown(up = false){
         // up/down history

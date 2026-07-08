@@ -56,4 +56,9 @@ export default {
   width: 180px;
   margin-right: 1em;
 }
+
+.ediv_content {
+  height: auto;
+  overflow: hidden;
+}
 </style>

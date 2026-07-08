@@ -19,7 +19,7 @@ import { logHtml } from './string'
 export default {
   name: "log",
   props: {
-    'logs': Object,
+    'logs': Array,
     'title': String,
     'collapse': {
       type: Object,
@@ -35,15 +35,19 @@ export default {
     }
   },
   watch: {
-    logs(val){
-      let tobj = []
-      val.forEach((log, idx)=>{
-        if (typeof log !== 'string') {
-          return
-        }
-        tobj.push({ log: logHtml(log), key: val.length - idx })
-      })
-      this.logobj = tobj
+    logs: {
+      handler(val){
+        let tobj = []
+        val.forEach((log, idx)=>{
+          if (typeof log !== 'string') {
+            return
+          }
+          tobj.push({ log: logHtml(log), key: val.length - idx })
+        })
+        this.logobj = tobj
+      },
+      deep: true,
+      immediate: true
     }
   }
 }

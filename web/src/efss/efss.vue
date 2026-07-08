@@ -78,7 +78,7 @@
         @keyup.esc.prevent.exact="fileMCheck('none')">
         <li v-for="(fpath, index) in showlist" :key="fpath.name" class="efssa" :class="{ 'efssa--directory': fpath.type === 'directory' }">
           <div v-if="fpath.type === 'file'" class="efssa_check">
-            <input type="checkbox" :value="fpath.name" v-model="filecheck" class="echeckbox">
+            <input type="checkbox" :checked="filecheck.includes(fpath.name)" @change="eFileCheck(fpath.name, $event)" class="echeckbox">
           </div>
           <span class="efssa_name" data-op="open" :data-type="fpath.type" :data-index="fpath.index" :data-name="fpath.name" :data-size="fpath.size">{{ fpath.name }}</span>
           <span class="efssa_mtime" data-op="mkdir">{{ $sTime(fpath.mtime) }}</span>
@@ -337,12 +337,12 @@ export default {
           let clist = this.curtshow.list.map(cf=>cf.name)
           let ulist = toUlist.map(uf=>{
             let cind = clist.indexOf(uf[0])
-            this.$set(this.curtshow.list, cind === -1 ? this.curtshow.list.length : cind, {
+            this.curtshow.list[cind === -1 ? this.curtshow.list.length : cind] = {
               type: 'file',
               name: uf[0],
               size: uf[1],
               mtime: this.$sTime()
-            })
+            }
             return uf[0]
           })
           this.$message.success(ulist.join(','), '上传成功')
@@ -940,6 +940,13 @@ export default {
         this.$message.error('下载失败', e.message);
         console.error(downloadurl, '下载失败', e);
       }).finally(hideloading)
+    },
+    eFileCheck(name, e) {
+      if (e.target.checked) {
+        this.filecheck.push(name)
+      } else {
+        this.filecheck.splice(this.filecheck.indexOf(name), 1)
+      }
     },
     fileMCheck(type = 'none') {
       switch(type){
