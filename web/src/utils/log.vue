@@ -1,10 +1,10 @@
 <template>
-  <div class="loginfo" :class="{ 'loginfo--full': !collapse.loginfo }"
-    tabindex="-1" @keyup.esc.prevent.stop.exact="collapse.loginfo=true">
+  <div class="loginfo" :class="{ 'loginfo--full': !logcollapse }"
+    tabindex="-1" @keyup.esc.prevent.stop.exact="logcollapse=true">
     <h3 class="loginfo_title">
-      <span class="loginfo_clear icon" @click="logs.splice(0)" :title="$t('clear')+$t('logs')" v-html="icon.clear"></span>
+      <span class="loginfo_clear icon" @click="clearLogs" :title="$t('clear')+$t('logs')" v-html="icon.clear"></span>
       <span>{{ title || 'elecV2P ' + $t('logs') }}</span>
-      <span @click.prevent.self="collapse.loginfo=!collapse.loginfo" class="title_collapse" :class="{ 'title_collapse--collapsed': collapse.loginfo }"></span>
+      <span @click.prevent.self="toggleCollapse" class="title_collapse" :class="{ 'title_collapse--collapsed': logcollapse }"></span>
     </h3>
     <div class="logcontext">
       <span class="loginfo_item" v-for="{ log, key } in logobj" :key="key" v-html="log"></span>
@@ -28,10 +28,12 @@ export default {
       }
     }
   },
+  emits: ['clear'],
   data(){
     return {
       icon,
       logobj: [],
+      logcollapse: true,
     }
   },
   watch: {
@@ -48,6 +50,23 @@ export default {
       },
       deep: true,
       immediate: true
+    },
+    collapse: {
+      handler(val){
+        if (val && val.loginfo !== undefined) {
+          this.logcollapse = val.loginfo
+        }
+      },
+      deep: true,
+      immediate: true
+    }
+  },
+  methods: {
+    clearLogs(){
+      this.$emit('clear')
+    },
+    toggleCollapse(){
+      this.logcollapse = !this.logcollapse
     }
   }
 }

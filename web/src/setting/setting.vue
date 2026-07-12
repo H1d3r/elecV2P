@@ -888,8 +888,8 @@ export default {
       const hideloading = this.$message.loading('语言偏好设置保存中...', 0)
       this.$axios.put('/config', { type: 'lang', data: this.lang }).then(response => {
         if (response.data.rescode === 0) {
-          let clang = this.setLanguage()
-          this.$message.success('成功设置当前语言偏好为', clang)
+          this.setLanguage()
+          location.reload()
         } else {
           this.$message.error('语言偏好修改失败', response.data.message)
         }

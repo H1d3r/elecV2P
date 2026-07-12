@@ -222,7 +222,7 @@ alt +enter: 查看任务日志">{{ $t('task') }}</th>
         <button class="elecBtn elecBtn--long elecBtn--tasksave" @click="taskSave()">{{ $t('save') }}</button>
       </p>
 
-      <log :logs="logs" :title="tasklogs" :collapse="collapse" />
+      <log :logs="logs" :title="tasklogs" :collapse="collapse" @clear="logs=[]" />
     </main>
     <footer class="footer">
       <ul>

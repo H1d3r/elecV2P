@@ -39,8 +39,8 @@
       </div>
     </div>
     <p class="hold_bcont center">
-      <button class="elecBtn hold_button" @click="holdDone">完成</button>
-      <button v-if="request" class="elecBtn hold_button" @click="reject">直接返回当前数据</button>
+      <button class="elecBtn hold_button" @click="holdDone">{{ $t('done') }}</button>
+      <button v-if="request" class="elecBtn hold_button" @click="reject">{{ $t('direct_return') }}</button>
     </p>
   </div>
 </template>
@@ -68,7 +68,7 @@ export default {
           this.header = JSON.parse(value)
         } catch {
           console.log('hold header string is not a json')
-          this.$message.error('header 内容并不是正确的 JSON 格式', 10)
+          this.$message.error(this.$t('header_invalid_json'), 10)
         }
       }
     }
@@ -97,7 +97,7 @@ export default {
           try {
             this.header = JSON.parse(el.value)
           } catch(e) {
-            this.$message.error('header 内容并不是正确的 JSON 格式', 10)
+            this.$message.error(this.$t('header_invalid_json'), 10)
             return
           }
         }

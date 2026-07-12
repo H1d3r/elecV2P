@@ -12,7 +12,7 @@
         <ul class="menu">
           <li v-for="(item, key) in navlist" class="menu_item" :class="{ 'menu_item--selected':currentpanel==key }" @click="nav(key)" :key="key">
             <span class="icon" v-html="icon[key]"></span>
-            <span class="menu_text fadein">{{ item.name || key.toUpperCase() }}</span>
+            <span class="menu_text fadein">{{ item.name || $t('nav_' + key) }}</span>
           </li>
         </ul>
       </div>
@@ -75,18 +75,19 @@ export default {
   created(){
     let hashtag = location.hash.slice(1).toLowerCase()
     this.currentpanel = this.menulist[hashtag] ? hashtag : 'overview'
+    this.setNavNames()
     let menunav_cache = this.$sJson(this.$uApi.store.get('menunav'))
     if (menunav_cache) {
-      this.menulist = menunav_cache
-    } else if (this.islangzh) {
-      this.menulist.overview.name = '基础信息'
-      this.menulist.task.name     = '定时任务'
-      this.menulist.rewrite.name  = '重写请求'
-      this.menulist.jsmanage.name = '脚本管理'
-      this.menulist.setting.name  = '设置相关'
-      this.menulist.cfilter.name  = '分流列表'
-      this.menulist.about.name    = '简介说明'
-      this.menulist.donation.name = '赞助打赏'
+      for (let nav in menunav_cache) {
+        if (this.menulist[nav]) {
+          if (menunav_cache[nav].name) {
+            this.menulist[nav].name = menunav_cache[nav].name
+          }
+          if (menunav_cache[nav].show !== undefined) {
+            this.menulist[nav].show = menunav_cache[nav].show
+          }
+        }
+      }
     }
     this.menulist.setting.show = true
     this.menulist.donation.show = true
@@ -157,6 +158,18 @@ export default {
     }
   },
   methods: {
+    setNavNames(){
+      this.menulist.overview.name = this.$t('nav_overview')
+      this.menulist.task.name     = this.$t('nav_task')
+      this.menulist.mitm.name     = this.$t('nav_mitm')
+      this.menulist.rules.name    = this.$t('nav_rules')
+      this.menulist.rewrite.name  = this.$t('nav_rewrite')
+      this.menulist.jsmanage.name = this.$t('nav_jsmanage')
+      this.menulist.setting.name  = this.$t('nav_setting')
+      this.menulist.cfilter.name  = this.$t('nav_cfilter')
+      this.menulist.about.name    = this.$t('nav_about')
+      this.menulist.donation.name = this.$t('nav_donation')
+    },
     nav(key) {
       location.hash = '#' + key
       if (!this.sidermobile) {
@@ -178,19 +191,22 @@ export default {
         console.debug('menu nav are expect')
         return
       }
-      if (!force && (JSON.stringify(mlist) === JSON.stringify(this.menulist))) {
-        console.debug('same menu nav, no need to update')
-        return
-      }
-      let flist = { ...this.menulist }
+      this.setNavNames()
+      let custom = {}
       for (let nav in mlist) {
-        // 过滤不属于 menulist 中的 nav
-        if (flist[nav]) {
-          flist[nav] = mlist[nav]
+        if (this.menulist[nav]) {
+          if (mlist[nav].name !== this.$t('nav_' + nav)) {
+            this.menulist[nav].name = mlist[nav].name
+            custom[nav] = { name: mlist[nav].name }
+          }
+          if (mlist[nav].show !== undefined) {
+            this.menulist[nav].show = mlist[nav].show
+            if (!custom[nav]) custom[nav] = {}
+            custom[nav].show = mlist[nav].show
+          }
         }
       }
-      this.menulist = flist
-      this.$uApi.store.set('menunav', JSON.stringify(flist))
+      this.$uApi.store.set('menunav', JSON.stringify(Object.keys(custom).length ? custom : null))
     },
     themeApply(theme = null){
       if (!theme) {

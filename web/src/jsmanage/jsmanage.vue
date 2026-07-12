@@ -74,7 +74,7 @@
         </div>
       </div>
       <mock :jslists="jslists" />
-      <log :logs="logs" :title="runlogs" :collapse="collapse" />
+      <log :logs="logs" :title="runlogs" :collapse="collapse" @clear="logs=[]" />
     </main>
     <footer class="footer">
       <ul class="footer_tip">

@@ -183,8 +183,8 @@
       logHtml,
       send(e){
         if(!this.$wsrecv.connected) {
-          this.$message.error('websocket 尚未连接')
-          this.logs.push(`[${this.$logHead('minishell  error')}][${this.$sTime(null, 1)}] websocket 尚未连接`)
+          this.$message.error(this.$t('websocket_not_connected'))
+          this.logs.push(`[${this.$logHead('minishell  error')}][${this.$sTime(null, 1)}] ${this.$t('websocket_not_connected')}`)
           return
         }
         if (e.ctrlKey || e.shiftKey) return
@@ -226,7 +226,7 @@
         }
         let subcommand = this.subprocess[commandid].subcommand
         if (!this.subprocess[commandid] || !subcommand) {
-          this.$message.error('请先输入要执行的命令')
+          this.$message.error(this.$t('select_text_first'))
           return
         }
         this.subprocess[commandid].subcommand = ''
