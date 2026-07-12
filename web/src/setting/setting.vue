@@ -289,7 +289,7 @@
         <li>关于通知类相关设置参考: <a href="https://github.com/elecV2/elecV2P-dei/tree/master/docs/07-feed&notify.md" target="elecV2PDoc">07-feed.md</a>。 其他参考: <a href="https://github.com/elecV2/elecV2P-dei/tree/master/docs" target="elecV2PDoc">全部说明文档</a> 相关项</li>
       </ul>
     </footer>
-    <div v-if='bShowMinishell' is="minishell"></div>
+    <minishell v-if='bShowMinishell' />
   </section>
 </template>
 

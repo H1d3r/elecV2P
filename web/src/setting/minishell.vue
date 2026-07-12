@@ -92,6 +92,7 @@
     },
     created(){
       this.logs.push(this.tips)
+      this.logBottom()
       this.$wsrecv.add('minishell', ms => {
         if (!ms.data) {
           console.debug('minishell recv', ms, 'expected ms.data')
@@ -101,6 +102,7 @@
         case 'cwd':
           this.logs.push('cwd: ' + ms.data)
           this.cwd = ms.data
+          this.logBottom()
           break
         case 'shellinit':
           this.logs.push('cwd: ' + ms.data.cwd)
@@ -108,6 +110,7 @@
           if (ms.data.subprocess) {
             this.subprocess = ms.data.subprocess
           }
+          this.logBottom()
           break
         case 'subprocessexit':
           if (this.subDelaySend[ms.data]) {
@@ -147,14 +150,17 @@
         case 'jsrunstatus':
           this.status.rtimes = ms.data.total
           break
-        default:
-          if (/\x1b\[H/.test(ms.data)) {
-            this.logs = [ms.data]
-          } else if (/\r|(\x1b\[F)/.test(ms.data)) {
-            this.logs.splice(-1, 1, ms.data)
+        default:{
+          const d = typeof ms.data === 'string' ? ms.data : JSON.stringify(ms.data)
+          if (/\x1b\[H/.test(d)) {
+            this.logs = [d]
+          } else if (/\r|(\x1b\[F)/.test(d)) {
+            this.logs.splice(-1, 1, d)
           } else {
-            this.logs.push(ms.data)
+            this.logs.push(d)
           }
+          this.logBottom()
+        }
         }
       })
 
@@ -164,9 +170,6 @@
       setTimeout(focusOn, 2000, '.shellcommand_input')
     },
     watch: {
-      logs(val) {
-        this.logBottom()
-      },
       subprocess() {
         this.logBottom()
       },
@@ -174,11 +177,7 @@
     methods: {
       logBottom(){
         if (this.autoScroll) {
-          this.autoScroll = false
-          setTimeout(()=>{
-            scrollBottom('.shelllogs')
-            this.autoScroll = true
-          }, 200)
+          requestAnimationFrame(() => scrollBottom('.shelllogs'))
         }
       },
       logHtml,
@@ -200,6 +199,7 @@
           case 'cls':
           case 'CLS':
             this.logs.splice(0)
+            this.logBottom()
             break
           case 'docs':
             open('https://github.com/elecV2/elecV2P-dei/blob/master/docs/Advanced.md')
@@ -212,6 +212,7 @@
               data: encodeURI(this.command),
             })
             this.logs.push(`[${this.$logHead('minishell notify')}][${this.$sTime(null, 1)}] running command: ${this.command}`)
+            this.logBottom()
           }
           this.history.lists.push(this.command)
           this.history.current = -1
