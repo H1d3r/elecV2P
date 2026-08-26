@@ -377,6 +377,13 @@
     .cp-save { background: var(--ac); color: #000; font-weight: bold; border: 1px solid var(--ac); }
     .cp-save:disabled { opacity: .5; cursor: not-allowed; }
     .cp-cancel { background: var(--bk3); color: var(--fc2); border: 1px solid var(--bd); }
+    .cp-fetch {
+      padding: 3px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;
+      background: var(--bk3); color: var(--ac); border: 1px solid var(--bd);
+      white-space: nowrap;
+    }
+    .cp-fetch:hover:not(:disabled) { border-color: var(--ac); background: rgba(88,166,255,.08); }
+    .cp-fetch:disabled { opacity: .5; cursor: not-allowed; }
     .notify {
       position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%);
       padding: 6px 14px; border-radius: 6px; font-size: 12px; z-index: 9998;
@@ -518,8 +525,11 @@
         </select>
       </div>
       <div class="cp-field">
-        <label>Model ids (comma separated)</label>
-        <input v-model="customForm.models" placeholder="e.g. gpt-4o-mini, gpt-4o" spellcheck="false">
+        <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>Model ids (comma separated)</span>
+          <button type="button" class="cp-fetch" :disabled="customFetchBusy || !(customForm.baseUrl || '').trim()" title="Fetch model list from the provider API" @click="fetchCustomModels">{{ customFetchBusy ? 'fetching…' : '↻ fetch from API' }}</button>
+        </label>
+        <input v-model="customForm.models" placeholder="click fetch to auto-discover, or type e.g. gpt-4o-mini, gpt-4o" spellcheck="false">
       </div>
       <div class="cp-actions">
         <button class="cp-cancel" @click="closeCustomProvider">cancel</button>
@@ -712,7 +722,7 @@
         currentProvider: '', provSeq: 0,
         omniCurrent: false, omniStatus: 'checking…',
         omniOverlay: false, omniErr: '', omniProgress: 'Starting OmniRoute...', omniLog: [], omniCmd: '', omniBusy: false, omniEs: null,
-        customOpen: false, customBusy: false, customEditing: false,
+        customOpen: false, customBusy: false, customEditing: false, customFetchBusy: false,
         customForm: { name: '', baseUrl: '', apiKey: '', api: 'openai-completions', models: '' },
         modelFilter: '',
         wfTips: [
@@ -1064,7 +1074,7 @@
           payload.api = p.api
           if (p.models && p.models.length) payload.models = p.models
         }
-        this.fetchFend(fendName, payload, 10000).then((data) => {
+        this.fetchFend(fendName, payload, 60000).then((data) => {
           self.providerBusy = false
           if (data && data.ok) {
             self.showNotify('Provider ' + name + (key ? ' saved' : ' selected'), 'success')
@@ -1211,6 +1221,35 @@
         if (this.customBusy) return
         this.customOpen = false
       },
+      fetchCustomModels() {
+        const self = this
+        const baseUrl = (this.customForm.baseUrl || '').trim()
+        if (!baseUrl) { this.showNotify('Please enter a base URL first'); return }
+        if (this.customFetchBusy) return
+        this.customFetchBusy = true
+        this.fetchFend('provider_fetch_models', {
+          name: (this.customForm.name || '').trim(),
+          baseUrl: baseUrl,
+          api: this.customForm.api,
+          apiKey: (this.customForm.apiKey || '').trim()
+        }, 60000).then((data) => {
+          self.customFetchBusy = false
+          if (data && data.ok && Array.isArray(data.models)) {
+            if (data.models.length) {
+              self.customForm.models = data.models.join(', ')
+              const removed = data.removed ? (' · ' + data.removed + ' unavailable removed') : ''
+              self.showNotify('Fetched ' + data.models.length + ' models' + removed, 'success')
+            } else {
+              self.showNotify('Provider returned an empty model list')
+            }
+          } else {
+            self.showNotify('Fetch failed: ' + ((data && data.error) || 'unknown'))
+          }
+        }).catch((e) => {
+          self.customFetchBusy = false
+          self.showNotify('Fetch failed: ' + e.message)
+        })
+      },
       saveCustomProvider() {
         const self = this
         const name = (this.customForm.name || '').trim().replace(/\s+/g, '-').toLowerCase()
@@ -1224,7 +1263,7 @@
         this.fetchFend('provider_custom_save', {
           name: name, baseUrl: baseUrl, apiKey: apiKey, api: this.customForm.api,
           models: (this.customForm.models || '').split(',').map((s) => s.trim()).filter(Boolean)
-        }, 10000).then((data) => {
+        }, 60000).then((data) => {
           self.customBusy = false
           if (data && data.ok) {
             self.showNotify('Custom provider ' + name + ' saved', 'success')
@@ -1978,6 +2017,180 @@ const httpGetUrl = (url, timeout, hops) => {
   })
 }
 
+const fetchProviderModelsRaw = (url, headers, timeout, hops) => {
+  return new Promise((resolve, reject) => {
+    let httpMod
+    try {
+      httpMod = require(/^https:/.test(String(url)) ? 'https' : 'http')
+    } catch(e) { reject(new Error('invalid url protocol')); return }
+    let u
+    try { u = new (require('url').URL)(url) } catch(e) { reject(new Error('invalid url: ' + url)); return }
+    const maxHops = hops === undefined ? 3 : hops
+    const req = httpMod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: Object.assign({ accept: 'application/json' }, headers || {})
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && maxHops > 0) {
+        res.resume()
+        let next = res.headers.location
+        try { next = new (require('url').URL)(next, url).href } catch(e) { reject(new Error('bad redirect')); return }
+        fetchProviderModelsRaw(next, headers, timeout, maxHops - 1).then(resolve, reject)
+        return
+      }
+      let buf = ''
+      res.on('data', (c) => { buf += c })
+      res.on('end', () => {
+        if (res.statusCode !== 200) { reject(new Error('HTTP ' + res.statusCode + (buf ? ': ' + buf.slice(0, 160) : ''))); return }
+        try { resolve(JSON.parse(buf)) } catch(e) { reject(new Error('response is not valid JSON')) }
+      })
+    })
+    req.on('error', (e) => { reject(new Error(e.message || 'request failed')) })
+    req.setTimeout(timeout || 10000, () => { req.destroy(); reject(new Error('request timeout')) })
+  })
+}
+
+const BAD_MODELS_KEY = 'pi_bad_models'
+const readBadModels = () => {
+  try {
+    const v = JSON.parse($store.get(BAD_MODELS_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch(e) { return {} }
+}
+const markBadModels = (keys) => {
+  const list = Array.isArray(keys) ? keys : [keys]
+  if (!list.length) return false
+  const bad = readBadModels()
+  let changed = false
+  for (const k of list) { if (k && !bad[k]) { bad[k] = Date.now(); changed = true } }
+  if (changed) { try { $store.set(BAD_MODELS_KEY, JSON.stringify(bad)) } catch(e) {} }
+  return changed
+}
+const reviveBadModels = (keys) => {
+  const list = Array.isArray(keys) ? keys : [keys]
+  if (!list.length) return
+  const bad = readBadModels()
+  let changed = false
+  for (const k of list) { if (bad[k]) { delete bad[k]; changed = true } }
+  if (changed) { try { $store.set(BAD_MODELS_KEY, JSON.stringify(bad)) } catch(e) {} }
+}
+
+// resolves {status, body} for any response; status 0 = network error/timeout
+const fetchProviderStatus = (url, headers, timeout, hops) => {
+  return new Promise((resolve) => {
+    let httpMod
+    try {
+      httpMod = require(/^https:/.test(String(url)) ? 'https' : 'http')
+    } catch(e) { resolve({ status: 0, body: '' }); return }
+    let u
+    try { u = new (require('url').URL)(url) } catch(e) { resolve({ status: 0, body: '' }); return }
+    const maxHops = hops === undefined ? 3 : hops
+    const req = httpMod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: Object.assign({ accept: 'application/json' }, headers || {})
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && maxHops > 0) {
+        res.resume()
+        let next = res.headers.location
+        try { next = new (require('url').URL)(next, url).href } catch(e) { resolve({ status: 0, body: '' }); return }
+        fetchProviderStatus(next, headers, timeout, maxHops - 1).then(resolve)
+        return
+      }
+      res.resume()
+      resolve({ status: res.statusCode, body: '' })
+    })
+    req.on('error', () => { resolve({ status: 0, body: '' }) })
+    req.setTimeout(timeout || 6000, () => { req.destroy(); resolve({ status: 0, body: '' }) })
+  })
+}
+
+const isDeadModelStatus = (s) => { return s === 404 || s === 410 }
+
+// probe each listed model via GET /models/{id}; drop ones the endpoint reports as gone (404/410).
+// unknown results (auth errors, rate limits, network issues) keep the model.
+const filterDeadModels = (api, baseUrl, apiKey, providerName, ids) => {
+  if ((api !== 'openai-completions' && api !== 'openai-responses') || !ids.length || ids.length > 150) {
+    return Promise.resolve({ ids: ids, removed: [] })
+  }
+  const root = String(baseUrl || '').replace(/\/+$/, '')
+  const headers = apiKey ? { authorization: 'Bearer ' + apiKey } : {}
+  const deadline = Date.now() + 45000
+  const CONC = 8
+  const alive = []
+  const removed = []
+  const runBatch = (batch) => {
+    return Promise.all(batch.map((id) => {
+      const enc = String(id).split('/').map(encodeURIComponent).join('/')
+      return fetchProviderStatus(root + '/models/' + enc, headers, 6000).then((r) => {
+        return { id: id, state: isDeadModelStatus(r.status) ? 'dead' : (r.status === 200 ? 'alive' : 'unknown') }
+      }).catch(() => { return { id: id, state: 'unknown' } })
+    }))
+  }
+  let chain = Promise.resolve()
+  for (let i = 0; i < ids.length; i += CONC) {
+    const batch = ids.slice(i, i + CONC)
+    chain = chain.then(() => {
+      if (removed.length && Date.now() > deadline) { alive.push(...batch); return [] }
+      return runBatch(batch)
+    }).then((results) => {
+      for (const r of results) {
+        if (r.state === 'dead') removed.push(r.id)
+        else alive.push(r.id)
+      }
+    })
+  }
+  return chain.then(() => {
+    if (providerName) {
+      const fullKeys = removed.map((id) => providerName + '/' + id)
+      if (fullKeys.length) markBadModels(fullKeys)
+      reviveBadModels(alive.filter((id) => !removed.includes(id)).map((id) => providerName + '/' + id))
+    }
+    return { ids: alive, removed: removed }
+  })
+}
+
+const fetchIdsForApi = (api, baseUrl, key) => {
+  api = String(api || 'openai-completions')
+  baseUrl = String(baseUrl || '').trim().replace(/\/+$/, '')
+  if (!baseUrl) return Promise.reject(new Error('base URL required'))
+  if (api === 'anthropic-messages') {
+    const root = baseUrl.replace(/\/v1$/, '')
+    return fetchProviderModelsRaw(root + '/v1/models?limit=1000', {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01'
+    }, 12000).then((j) => {
+      const list = (j && j.data) || []
+      return list.map((m) => m && m.id).filter(Boolean)
+    })
+  }
+  if (api === 'google-generative-ai') {
+    return fetchProviderModelsRaw('https://generativelanguage.googleapis.com/v1beta/models' + (key ? '?key=' + encodeURIComponent(key) + '&pageSize=1000' : '?pageSize=1000'), {}, 12000).then((j) => {
+      const list = (j && j.models) || []
+      return list.map((m) => String((m && m.name) || '').replace(/^models\//, '')).filter(Boolean)
+    })
+  }
+  return fetchProviderModelsRaw(baseUrl + '/models', key ? { authorization: 'Bearer ' + key } : {}, 12000).then((j) => {
+    const list = Array.isArray(j) ? j : ((j && (j.data || j.models)) || [])
+    return list.map((m) => typeof m === 'string' ? m : (m && m.id)).filter(Boolean)
+  })
+}
+
+const fetchModelsForApi = (api, baseUrl, apiKey, providerName) => {
+  const key = String(apiKey || '').replace(/^\$.*/, '')
+  return fetchIdsForApi(api, baseUrl, key).then((ids) => {
+    return filterDeadModels(api, baseUrl, key, providerName || '', dedupeList(ids))
+  })
+}
+
+const dedupeList = (arr) => {
+  const out = []
+  for (const item of arr || []) { if (item && out.indexOf(item) < 0) out.push(item) }
+  return out
+}
+
 const fetchOmniModels = () => {
   return new Promise((resolve) => {
     httpGetUrl(OMNI_HOST + '/v1/models', 6000, 3).then((r) => {
@@ -2049,12 +2262,13 @@ const parseModel = (s) => {
 
 const collectConfiguredModels = (mj) => {
   const out = []
+  const bad = readBadModels()
   if (mj && mj.providers) {
     for (const p of Object.keys(mj.providers)) {
       const conf = mj.providers[p] || {}
       const models = conf.models || []
       for (const m of models) {
-        if (m && m.id) out.push(p + '/' + m.id)
+        if (m && m.id && !bad[p + '/' + m.id]) out.push(p + '/' + m.id)
       }
     }
   }
@@ -2100,6 +2314,31 @@ const PROVIDER_PRESETS = [
     { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat (OR)', contextWindow: 128000, maxTokens: 8192 }
   ] }
 ]
+
+$fend('provider_fetch_models', (data) => {
+  const name = data && data.name ? String(data.name).trim() : ''
+  let baseUrl = data && data.baseUrl ? String(data.baseUrl).trim() : ''
+  let api = data && data.api ? String(data.api).trim() : ''
+  let apiKey = data && data.apiKey ? String(data.apiKey).trim() : ''
+  if (name) {
+    const conf = (readModelsJson() || { providers: {} }).providers[name]
+    if (conf) {
+      if (!baseUrl) baseUrl = String(conf.baseUrl || '')
+      if (!api) api = String(conf.api || '')
+      if (!apiKey && conf.apiKey && !/^\$/.test(String(conf.apiKey))) apiKey = String(conf.apiKey)
+    }
+    const preset = PROVIDER_PRESETS.find((p) => p.name === name)
+    if (preset) {
+      if (!baseUrl) baseUrl = preset.baseUrl
+      if (!api) api = preset.api
+    }
+  }
+  return fetchModelsForApi(api, baseUrl, apiKey, name).then((res) => {
+    return { ok: true, models: dedupeList(res.ids), removed: (res.removed || []).length }
+  }).catch((e) => {
+    return { ok: false, error: e.message || String(e) }
+  })
+})
 
 $fend('providers', (data) => {
   const mj = readModelsJson() || { providers: {} }
@@ -2190,12 +2429,43 @@ $fend('provider_save', (data) => {
       if (!mj.providers[name].apiKey) delete mj.providers[name].apiKey
       st.defaultProvider = name
       st.defaultModel = preset.models[0] ? name + '/' + preset.models[0].id : undefined
+      writeFileJson(modelsFile(), mj)
+      writeFileJson(SETTINGS_FILE(), st)
+      try { $store.set('pi_models_cache', 'null') } catch(e) {}
+      try { $store.set('pi_models_time', '0') } catch(e) {}
+      // Preset models are already saved and usable. Now try to refresh the list from the provider API.
+      return new Promise((resolve) => {
+        fetchModelsForApi(preset.api, preset.baseUrl, mj.providers[name].apiKey, name).then((res) => {
+          try {
+            const fresh = readModelsJson()
+            if (fresh && fresh.providers && fresh.providers[name]) {
+              const metaMap = {}
+              for (const m of preset.models) metaMap[m.id] = m
+              const merged = []
+              for (const id of res.ids) {
+                const src = metaMap[id]
+                merged.push(src ? Object.assign({}, src, { id: id }) : { id: id, name: id, contextWindow: 128000, maxTokens: 16384 })
+              }
+              if (merged.length) {
+                fresh.providers[name].models = merged
+                // keep the default model usable if the preset default vanished from the live list
+                const defId = String(st.defaultModel || '').split('/').slice(1).join('/')
+                if (defId && !merged.some((m) => m.id === defId)) {
+                  st.defaultModel = name + '/' + merged[0].id
+                  writeFileJson(SETTINGS_FILE(), st)
+                }
+                writeFileJson(modelsFile(), fresh)
+                try { $store.set('pi_models_cache', 'null') } catch(e2) {}
+                try { $store.set('pi_models_time', '0') } catch(e2) {}
+              }
+            }
+          } catch(e) {}
+          resolve({ ok: true, model: String(st.defaultModel || '') })
+        }).catch(() => {
+          resolve({ ok: true, model: String(st.defaultModel || '') })
+        })
+      })
     }
-    writeFileJson(modelsFile(), mj)
-    writeFileJson(SETTINGS_FILE(), st)
-    try { $store.set('pi_models_cache', 'null') } catch(e) {}
-    try { $store.set('pi_models_time', '0') } catch(e) {}
-    return { ok: true, model: String(st.defaultModel || '') }
   } catch(e) {
     return { ok: false, error: e.message }
   }
@@ -2218,20 +2488,32 @@ $fend('provider_custom_save', (data) => {
     const finalKey = apiKey || prev.apiKey || null
     const modelIds = Array.isArray(data.models) ? data.models.map((m) => String(m).trim()).filter(Boolean) : []
     const models = modelIds.map((id) => ({ id: id, name: id, contextWindow: 128000, maxTokens: 16384 }))
-    if (!models.length) {
+    if (!models.length && !(data.models || []).length) {
+      // editing without touching the model field: keep previously saved models
       const pm = (prev.models || []).map((m) => (m && m.id) ? m.id : '')
       for (const mid of pm) { if (mid) models.push({ id: mid, name: mid, contextWindow: 128000, maxTokens: 16384 }) }
     }
-    if (!models.length) return { ok: false, error: 'at least one model id is required' }
-    mj.providers[name] = { baseUrl: baseUrl, api: api, apiKey: finalKey, authHeader: true, models: models }
-    if (!mj.providers[name].apiKey) delete mj.providers[name].apiKey
-    st.defaultProvider = name
-    st.defaultModel = models.length ? name + '/' + models[0].id : undefined
-    writeFileJson(modelsFile(), mj)
-    writeFileJson(SETTINGS_FILE(), st)
-    try { $store.set('pi_models_cache', 'null') } catch(e) {}
-    try { $store.set('pi_models_time', '0') } catch(e) {}
-    return { ok: true, model: String(st.defaultModel || '') }
+    const finishSave = (list) => {
+      if (!list.length) return { ok: false, error: 'no models available: type model ids or use fetch' }
+      mj.providers[name] = { baseUrl: baseUrl, api: api, apiKey: finalKey, authHeader: true, models: list }
+      if (!mj.providers[name].apiKey) delete mj.providers[name].apiKey
+      st.defaultProvider = name
+      st.defaultModel = name + '/' + list[0].id
+      writeFileJson(modelsFile(), mj)
+      writeFileJson(SETTINGS_FILE(), st)
+      try { $store.set('pi_models_cache', 'null') } catch(e) {}
+      try { $store.set('pi_models_time', '0') } catch(e) {}
+      return { ok: true, model: String(st.defaultModel || '') }
+    }
+    if (models.length) return finishSave(models)
+    // no models provided: try auto-discovery from the endpoint, same as pi login flow
+    return new Promise((resolve) => {
+      fetchModelsForApi(api, baseUrl, finalKey, name).then((res) => {
+        resolve(finishSave(res.ids.map((id) => ({ id: id, name: id, contextWindow: 128000, maxTokens: 16384 }))))
+      }).catch((e) => {
+        resolve({ ok: false, error: 'no models provided and auto-fetch failed: ' + (e.message || e) })
+      })
+    })
   } catch(e) {
     return { ok: false, error: e.message }
   }
@@ -2772,6 +3054,10 @@ $fend('start', (data) => {
       }
       if (msg.errorMessage) {
         const etxt = String(msg.errorMessage)
+        if (/\b(404|410)\b/.test(etxt)) {
+          const mk = model || modelStr || defModel || ''
+          if (mk && markBadModels([mk])) sendRef('⚠ ' + mk + ' unavailable (404/410) · removed from list', 'info')
+        }
         if (isRetryable(etxt) && retryLeft > 0 && !retrying) {
           retryLeft--
           const attempt = MAX_RETRY - retryLeft
