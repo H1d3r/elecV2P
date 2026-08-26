@@ -1486,6 +1486,12 @@
               try { localStorage.setItem('aichat_pi_last_model', self.currentModel) } catch(e) {}
               return
             }
+            if (data.type === 'model_removed') {
+              if (data.model && self.models.indexOf(data.model) >= 0) {
+                self.models = self.models.filter((m) => m !== data.model)
+              }
+              return
+            }
             if (data.type === 'ref') {
               flushText()
               el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '' })
@@ -2903,6 +2909,10 @@ $fend('start', (data) => {
   let switchLeft = MAX_SWITCH
   let retrying = false
   const triedModels = new Set()
+  let autoRetryCount = 0   // pi internal auto-retries seen
+  let lastErrText = ''     // last errorMessage from events
+  let runHadOutput = false // did we stream any text/reasoning/tool output
+  let stderrTail = ''      // tail of stderr for exit diagnosis
 
   const defModel = (() => {
     const st = readSettingsJson()
@@ -2939,6 +2949,7 @@ $fend('start', (data) => {
   }
 
   const send = (type, payload) => {
+    if (type === 'text' || type === 'reasoning' || type === 'out') runHadOutput = true
     if (type !== 'done' && type !== 'error') kickWatchdog()
     $ws.sse(APP_CH, JSON.stringify(Object.assign({ runId: runId }, payload || {}, { type: type })))
   }
@@ -3069,14 +3080,24 @@ $fend('start', (data) => {
       }
       if (msg.errorMessage) {
         const etxt = String(msg.errorMessage)
+        lastErrText = etxt
         let removed = false
-        if (/\b(400|404|410)\b/.test(etxt)) {
+        if (/\b(400|404|410|502)\b/.test(etxt)) {
           const mk = model || modelStr || defModel || ''
-          if (mk && markBadModels([mk])) { sendRef('⚠ ' + mk + ' unavailable (400/404/410) · removed from list', 'info'); removed = true }
+          if (mk) {
+            const newly = markBadModels([mk])
+            const errLine = etxt.split('\n')[0].slice(0, 160)
+            sendRef('⚠ ' + mk + ' unavailable · ' + (newly ? 'removed from list' : 'already removed') + ' · ' + errLine, 'info')
+            send('model_removed', { model: mk })  // drop from frontend list even if no further switch happens
+            removed = true
+          }
         }
         if (removed) {
           // model is gone for good — switch to the next available model instead of retrying the same one
           if (!switchToNextModel(etxt, 'removed')) fail(etxt.split('\n')[0])
+        } else if (switchOnly(etxt)) {
+          // transient overload / connection blip — switch directly, no same-model retry, don't mark bad
+          if (!switchToNextModel(etxt, 'switch')) fail(etxt.split('\n')[0])
         } else if (isRetryable(etxt) && retryLeft > 0 && !retrying) {
           retryLeft--
           const attempt = MAX_RETRY - retryLeft
@@ -3129,10 +3150,9 @@ $fend('start', (data) => {
     }
     if (t === 'compaction_start') { sendRef('↻ compacting…', 'info'); return }
     if (t === 'compaction_end') { sendRef('✓ context compacted', 'info'); return }
-    if (t === 'auto_retry_start') { sendRef('↻ retrying…', 'info'); return }
+    if (t === 'auto_retry_start') { autoRetryCount++; sendRef('↻ retrying…', 'info'); return }
     if (t === 'agent_end' || t === 'agent_settled') {
-      if (retrying) return
-      finish({ content: '', model: model, tokens: tokens })
+      endRun(0, 'event')
       return
     }
   }
@@ -3188,8 +3208,9 @@ $fend('start', (data) => {
     retryLeft = MAX_RETRY  // fresh budget for the new model
     activeModel = next
     send('model', { model: next, removed: reason === 'removed' })  // keep frontend model selector in sync
-    const why = reason === 'removed' ? (gone + ' removed') : (gone + ' retries exhausted')
-    sendRef('↻ ' + why + ' · switching to ' + next + ' (' + (MAX_SWITCH - switchLeft) + '/' + MAX_SWITCH + ')', 'info')
+    const why = reason === 'removed' ? (gone + ' removed') : (reason === 'switch' ? (gone + ' switching') : (gone + ' retries exhausted'))
+    const errLine = etxt ? ' · ' + String(etxt).split('\n')[0].slice(0, 160) : ''
+    sendRef('↻ ' + why + ' · switching to ' + next + ' (' + (MAX_SWITCH - switchLeft) + '/' + MAX_SWITCH + ')' + errLine, 'info')
     retrying = true
     kickWatchdog()
     setTimeout(() => { relaunch() }, 800)
@@ -3197,11 +3218,34 @@ $fend('start', (data) => {
   }
   const isRetryable = (etxt) => {
     if (!etxt) return false
-    return /410|429|422|1302|limit_burst_rate|rate.?limit|速率限制|请求频率|并发|concurrency|5\d\d|admission_busy|chat_admission|server_error|service_temporarily_unavailable|ResourceExhausted|timed.?out|timeout|请求超时/i.test(etxt)
+    return /410|429|422|1302|503|limit_burst_rate|rate.?limit|速率限制|请求频率|并发|concurrency|5\d\d|admission_busy|chat_admission|server_error|service_temporarily_unavailable|ResourceExhausted|temporarily|繁忙|timed.?out|timeout|请求超时/i.test(etxt)
+  }
+  // transient (overload / connection blip / auth denied): skip same-model retry, switch directly — but don't mark bad
+  const switchOnly = (etxt) => {
+    if (!etxt) return false
+    return /\b(401|403)\b|overload|capacity|connection|unauthorized|forbidden|invalid.api.key|permission.denied|权限|未授权|鉴权|过载|连接/i.test(etxt)
   }
   const retryDelayMs = (attemptLeft) => {
     const tried = MAX_RETRY - attemptLeft
     return [5000, 10000, 30000][tried - 1] || 30000
+  }
+  // unified end-of-run: recover (switch model) when the run died with error signs but produced no output
+  const endRun = (code, via) => {
+    if (streamEnded || retrying || pronBreaking) return
+    const errHint = autoRetryCount > 0 || !!lastErrText || /error|fail|unavailable|overload|refused|timeout|econn|exceed/i.test(stderrTail)
+    if (!errHint) {
+      if (code !== 0) fail('pi exited with code ' + code)
+      else finish({ content: '', model: model, tokens: tokens })
+      return
+    }
+    // pi recovered mid-run after a transient hiccup — treat as normal completion
+    if (runHadOutput && code === 0 && via === 'event') {
+      finish({ content: '', model: model, tokens: tokens })
+      return
+    }
+    const line = ((lastErrText || stderrTail || '').trim().split('\n')[0] || '').slice(0, 200)
+    const etxt = line || ('pi exited with code ' + code)
+    if (!switchToNextModel(etxt, 'switch')) fail(etxt)
   }
 
   const qArg = (val) => {
@@ -3254,18 +3298,17 @@ $fend('start', (data) => {
       }
     })
     proc.stderr.on('data', (chunk) => {
-      const t2 = stripAnsi(chunk.toString()).trim()
-      if (t2 && t2.indexOf('Warning:') < 0) console.log('[pi run]', t2)
+      const t2 = stripAnsi(chunk.toString()).replace(/\s+/g, ' ').trim()
+      if (!t2 || t2.indexOf('Warning:') >= 0) return
+      console.log('[pi run]', t2)
+      stderrTail = (stderrTail ? stderrTail + ' ' : '') + t2
+      if (stderrTail.length > 400) stderrTail = stderrTail.slice(-400)
     })
 
     proc.on('error', (e) => { fail(e.message || String(e)) })
     proc.on('close', (code) => {
       try { delete runProcs[runId] } catch(e) {} try { $cache.delete('pi_run_' + runId) } catch(e) {}
-      if (streamEnded) return
-      if (retrying) return
-      if (pronBreaking) return
-      if (code !== 0) fail('pi exited with code ' + code)
-      else finish({ content: '', model: model, tokens: tokens })
+      endRun(code, 'close')
     })
 
     kickWatchdog()
