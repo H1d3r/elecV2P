@@ -514,7 +514,7 @@
       </div>
       <div class="cp-field">
         <label>API key</label>
-        <input v-model="customForm.apiKey" :placeholder="customEditing ? 'key saved · empty to keep' : 'sk-...'" type="password">
+        <input v-model="customForm.apiKey" :placeholder="customEditing ? 'leave empty to keep current key' : 'API key (required)'" type="password">
       </div>
       <div class="cp-field">
         <label>API type</label>
@@ -722,8 +722,8 @@
         sseMain: null, mainReady: false, sseHandlers: {}, switching: false,
         providerOverlay: false, providerList: [], providerKeys: {}, providerBusy: false,
         currentProvider: '', provSeq: 0,
-        omniCurrent: false, omniStatus: 'checking…',
-        omniOverlay: false, omniErr: '', omniProgress: 'Starting OmniRoute...', omniLog: [], omniCmd: '', omniBusy: false, omniEs: null,
+        omniCurrent: false, omniStatus: 'checking…', omniRunning: false,
+        omniOverlay: false, omniErr: '', omniProgress: 'Starting OmniRoute...', omniLog: [], omniCmd: '', omniBusy: false, omniEs: null, omniPendingModel: '',
         customOpen: false, customBusy: false, customEditing: false, customFetchBusy: false,
         customForm: { name: '', baseUrl: '', apiKey: '', api: 'openai-completions', models: '' },
         modelFilter: '',
@@ -949,7 +949,16 @@
         }).then((r) => { return r.json() })
       },
       selectModel(m) {
-        this.currentModel = (m || '').replace(/\r/g, '')
+        const model = (m || '').replace(/\r/g, '')
+        const pidx = model.indexOf('/')
+        if (pidx > 0 && model.slice(0, pidx) === 'omniroute' && !this.omniRunning) {
+          this.dropdown = ''
+          if (!confirm('OmniRoute is not started yet.\nEnable and start it now?')) return
+          this.omniPendingModel = model
+          this.useOmniRoute()
+          return
+        }
+        this.currentModel = model
         localStorage.setItem('aichat_pi_last_model', this.currentModel)
         this.dropdown = ''
         this.refreshCtx()
@@ -1049,6 +1058,7 @@
           if (data && Array.isArray(data.providers)) self.providerList = data.providers
           self.omniCurrent = !!(data && data.omniCurrent)
           self.omniStatus = data && data.omniStatus ? data.omniStatus : 'offline'
+          self.omniRunning = !!(data && data.omniRunning)
           const cur = (self.providerList || []).find((p) => p.current)
           self.currentProvider = self.omniCurrent ? 'omniroute' : (cur ? cur.name : '')
           return data || {}
@@ -1145,9 +1155,10 @@
                   self.omniCurrent = true
                   self.currentProvider = 'omniroute'
                   self.providerOverlay = false
+                  const pickModel = self.omniPendingModel || (data && data.model) || ''
+                  self.omniPendingModel = ''
                   self.loadSessions().then(() => {
-                    const defModel = data && data.model ? data.model : ''
-                    if (defModel) self.switchDefaultModel(defModel)
+                    if (pickModel) self.switchDefaultModel(pickModel)
                     else self.selectModel('')
                   })
                 } else {
@@ -1180,9 +1191,10 @@
                 self.omniCurrent = true
                 self.currentProvider = 'omniroute'
                 self.providerOverlay = false
+                const pickModel = self.omniPendingModel || (sav && sav.model) || ''
+                self.omniPendingModel = ''
                 self.loadSessions().then(() => {
-                  const defModel = sav && sav.model ? sav.model : ''
-                  if (defModel) self.switchDefaultModel(defModel)
+                  if (pickModel) self.switchDefaultModel(pickModel)
                   else self.selectModel('')
                 })
               } else {
@@ -1484,6 +1496,8 @@
               }
               self.currentModel = (data.model || '').replace(/\r/g, '')
               try { localStorage.setItem('aichat_pi_last_model', self.currentModel) } catch(e) {}
+              const mp = self.currentModel.indexOf('/')
+              if (mp > 0) self.currentProvider = self.currentModel.slice(0, mp)
               return
             }
             if (data.type === 'model_removed') {
@@ -1869,6 +1883,7 @@
         this.omniOverlay = false
         this.omniErr = ''
         this.omniBusy = false
+        this.omniPendingModel = ''
         this.showProviderPicker()
       },
       initApp() {
@@ -2388,14 +2403,15 @@ $fend('providers', (data) => {
   else if ((mj.providers || {}).omniroute) omniStatus = 'installed · not default'
   return new Promise((resolve) => {
     httpGetUrl(OMNI_HOST + '/', 3000).then((r) => {
-      if (r.status === 200) {
+      const running = r.status === 200
+      if (running) {
         if (omniStatus.indexOf('enabled') < 0 && omniStatus.indexOf('pending') < 0) omniStatus = 'running'
         else if (omniStatus.indexOf('pending') === 0) omniStatus = 'running · pending config'
       } else {
         if (omniStatus.indexOf('enabled') >= 0) omniStatus = 'default but not running'
       }
-      resolve({ ok: true, providers: list, omniCurrent: omniCurrent, omniStatus: omniStatus, hasOmniConfig: !!(mj.providers || {}).omniroute })
-    }).catch(() => { resolve({ ok: true, providers: list, omniCurrent: omniCurrent, omniStatus: omniStatus, hasOmniConfig: !!(mj.providers || {}).omniroute }) })
+      resolve({ ok: true, providers: list, omniCurrent: omniCurrent, omniStatus: omniStatus, hasOmniConfig: !!(mj.providers || {}).omniroute, omniRunning: running })
+    }).catch(() => { resolve({ ok: true, providers: list, omniCurrent: omniCurrent, omniStatus: omniStatus, hasOmniConfig: !!(mj.providers || {}).omniroute, omniRunning: false }) })
   })
 })
 
