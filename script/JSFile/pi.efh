@@ -3239,7 +3239,7 @@ $fend('start', (data) => {
   // transient (overload / connection blip / auth denied): skip same-model retry, switch directly — but don't mark bad
   const switchOnly = (etxt) => {
     if (!etxt) return false
-    return /\b(401|403)\b|overload|capacity|connection|unauthorized|forbidden|invalid.api.key|permission.denied|权限|未授权|鉴权|过载|连接/i.test(etxt)
+    return /\b(401|402|403)\b|overload|capacity|connection|unauthorized|forbidden|invalid.api.key|permission.denied|权限|未授权|鉴权|过载|连接/i.test(etxt)
   }
   const retryDelayMs = (attemptLeft) => {
     const tried = MAX_RETRY - attemptLeft
