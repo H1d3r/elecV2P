@@ -155,6 +155,11 @@
     .msg .ref.reasoning { border-left-color: #a78bfa; font-style: italic; }
     .msg .ref.question { border-left-color: #fa0; white-space: pre-wrap; }
     .msg .ref.answer { border-left-color: #0c8; white-space: pre-wrap; }
+    .msg .ref .run-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--ac); margin-left: 8px; vertical-align: middle;
+      animation: pulse 1s infinite;
+    }
     .msg .tool-out {
       font-size: 12px; color: var(--fc2); white-space: pre-wrap; word-break: break-all;
       font-family: 'Cascadia Code','Fira Code','Consolas','Courier New',monospace;
@@ -638,7 +643,7 @@
       <template v-if="m.role === 'user'">{{ m.content }}</template>
       <template v-else>
         <div v-for="(p, pi) in m.parts" :key="pi">
-          <div v-if="p.t === 'ref'" :class="['ref', p.cls || refClass(p.c)]" :style="p.cls === 'reasoning' && p.body ? 'cursor: pointer;' : ''" @click="p.cls === 'reasoning' && p.body ? (p.open = p.open === undefined ? false : !p.open) : null">{{ p.c }}</div>
+          <div v-if="p.t === 'ref'" :class="['ref', p.cls || refClass(p.c)]" :style="p.cls === 'reasoning' && p.body ? 'cursor: pointer;' : ''" @click="p.cls === 'reasoning' && p.body ? (p.open = p.open === undefined ? false : !p.open) : null">{{ p.c }}<span v-if="p.running" class="run-dot"></span></div>
           <div v-if="p.t === 'ref' && p.cls === 'reasoning' && p.body && p.open !== false" class="reasoning-body" @scroll="reasoningScroll($event)">{{ p.body }}</div>
           <pre v-else-if="p.t === 'out'" class="tool-out">{{ p.c }}</pre>
           <template v-else-if="p.t === 'text'">
@@ -721,6 +726,7 @@
         workspace: '', wsBusy: false,
         sseMain: null, mainReady: false, sseHandlers: {}, switching: false,
         providerOverlay: false, providerList: [], providerKeys: {}, providerBusy: false,
+        scrollPending: false,
         currentProvider: '', provSeq: 0,
         omniCurrent: false, omniStatus: 'checking…', omniRunning: false,
         omniOverlay: false, omniErr: '', omniProgress: 'Starting OmniRoute...', omniLog: [], omniCmd: '', omniBusy: false, omniEs: null, omniPendingModel: '',
@@ -1494,7 +1500,19 @@
 
         let textBuf = ''
         let textFlush = null
+        let reasonBuf = ''
+        let reasonFlush = null
+        const flushReasoning = () => {
+          if (reasonFlush) { clearTimeout(reasonFlush); reasonFlush = null }
+          if (!reasonBuf) return
+          const lastP = el.parts[el.parts.length - 1]
+          if (lastP && lastP.t === 'ref' && lastP.cls === 'reasoning') lastP.body = (lastP.body || '') + reasonBuf
+          else el.parts.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: reasonBuf })
+          reasonBuf = ''
+          self.scrollReasoningBottom()
+        }
         const flushText = () => {
+          flushReasoning()
           if (textFlush) { clearTimeout(textFlush); textFlush = null }
           if (!textBuf) return
           const last = el.parts[el.parts.length - 1]
@@ -1508,6 +1526,19 @@
 
         const onMsg = (data) => {
           try {
+            const clearRunning = () => {
+              for (let i = 0; i < el.parts.length; i++) if (el.parts[i].running) el.parts[i].running = false
+            }
+            if (data.type === 'running') {
+              // 工具开始执行：在对应 ref 行点亮一个运行指示灯，消除"卡住"的观感
+              clearRunning()
+              const lastRef = el.parts[el.parts.length - 1]
+              if (lastRef && lastRef.t === 'ref') {
+                lastRef.running = true
+                self.scrollBottom()
+              }
+              return
+            }
             if (data.type === 'init') {
               if (data.content && el.initShown !== data.content) {
                 flushText()
@@ -1534,15 +1565,20 @@
               return
             }
             if (data.type === 'ref') {
+              clearRunning()
               flushText()
-              el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '' })
+              if (data.uid) {
+                const found = el.parts.find((p) => p.uid === data.uid)
+                if (found) { found.c = data.content; found.cls = data.cls || '' }
+                else el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '', uid: data.uid })
+              } else {
+                el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '' })
+              }
             }
             if (data.type === 'reasoning') {
               flushText()
-              const lastP = el.parts[el.parts.length - 1]
-              if (lastP && lastP.t === 'ref' && lastP.cls === 'reasoning') lastP.body = (lastP.body || '') + (data.content || '')
-              else el.parts.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: data.content || '' })
-              self.scrollReasoningBottom()
+              reasonBuf += data.content || ''
+              if (!reasonFlush) reasonFlush = setTimeout(flushReasoning, 50)
             }
             if (data.type === 'out') {
               flushText()
@@ -1897,7 +1933,10 @@
         el.__stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 24
       },
       scrollReasoningBottom() {
+        if (this.scrollPending) return
+        this.scrollPending = true
         this.$nextTick(() => {
+          this.scrollPending = false
           const els = document.querySelectorAll('.reasoning-body')
           if (!els.length) return
           const el = els[els.length - 1]
@@ -2308,7 +2347,26 @@ const toolArg = (inp) => {
     const newLines = typeof i.new_string === 'string' && i.new_string ? i.new_string.split('\n').length : 0
     arg += ' · -' + oldLines + '/+' + newLines
   }
+  if (Array.isArray(i.edits) && i.edits.length) {
+    let oldLines = 0, newLines = 0
+    for (const ed of i.edits) {
+      const o = ed && (ed.oldText || ed.old_string)
+      const n = ed && (ed.newText || ed.new_string)
+      if (o) oldLines += o.split('\n').length
+      if (n) newLines += n.split('\n').length
+    }
+    arg += ' · -' + oldLines + '/+' + newLines
+    if (i.edits.length > 1) arg += ' · ' + i.edits.length + ' blocks'
+  }
   return arg
+}
+
+const isFileEditTool = (name) => { return /^(edit|write)$/.test(String(name || '').toLowerCase()) }
+const toolCallRef = (name, arg) => {
+  name = String(name || 'tool')
+  const suf = arg ? ' · ' + maskSecrets(arg) : ''
+  if (isFileEditTool(name)) return { c: '← ' + name + suf, cls: 'edit' }
+  return { c: '◈ ' + name + suf, cls: 'tool' }
 }
 
 const parseModel = (s) => {
@@ -2889,7 +2947,8 @@ const convFromFile = (full) => {
       else if (p.type === 'thinking' && p.thinking) plist.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: p.thinking })
       else if (p.type === 'toolCall') {
         const arg = toolArg(p.arguments || {})
-        plist.push({ t: 'ref', c: '◈ ' + (p.name || 'tool') + (arg ? ' · ' + maskSecrets(arg) : ''), cls: 'tool' })
+        const ref = toolCallRef(p.name || 'tool', arg)
+        plist.push({ t: 'ref', c: ref.c, cls: ref.cls })
       }
     }
     if (msg.errorMessage) plist.push({ t: 'text', c: 'Error: ' + msg.errorMessage, cls: 'err-text' })
@@ -2983,6 +3042,10 @@ $fend('start', (data) => {
   const seenTools = {}
   const lastToolOut = {}
   const reasoningSeen = {}
+  const streamTc = {}
+  let tcUidSeq = 0
+  let compactingSince = 0
+  let compactTick = null
   let watchdog = null
   let aliveTimer = null
   let toolHeartbeat = null
@@ -3037,6 +3100,12 @@ $fend('start', (data) => {
   }
   const finish = (payload) => {
     if (streamEnded) return
+    if (switchLeft < MAX_SWITCH && !(payload && payload.timeout)) {
+      // 整个 run 成功完成才重置自动切换次数；期间的真实失败会累积计数，避免中途闪断即清零
+      switchLeft = MAX_SWITCH
+      retryLeft = MAX_RETRY
+      sendRef('✓ ' + (model || 'model') + ' run completed · switch budget reset (0/' + MAX_SWITCH + ')', 'info')
+    }
     streamEnded = true
     if (watchdog) clearTimeout(watchdog)
     if (aliveTimer) clearInterval(aliveTimer)
@@ -3100,13 +3169,32 @@ $fend('start', (data) => {
         if (reasoningSeen[ci]) { reasoningSeen[ci] = false; sendRef('✓ reasoning done', 'reasoning') }
         return
       }
+      if (at === 'toolcall_start') {
+        // 工具调用正在流式生成（名称要到 toolcall_end 才知道）：先亮占位脉冲，消除静默等待感
+        const uid = 'tc-' + (++tcUidSeq)
+        streamTc[ci] = uid
+        send('ref', { content: '◈ generating tool call…', cls: 'tool', uid: uid })
+        send('running', { tool: 'tool-call', callId: uid })
+        return
+      }
+      if (at === 'toolcall_delta') {
+        return // 内容累积中，保持脉冲点亮；toolcall_end 一次性显示最终 ref
+      }
       if (at === 'toolcall_end') {
         const tc = ame.toolCall || {}
         const arg = toolArg(tc.arguments || {})
         const callId = tc.toolCallId || tc.id || tc.name || 'tool'
-        if (!seenTools[callId]) {
+        const uid = streamTc[ci] || undefined
+        delete streamTc[ci]
+        if (uid) {
+          // 把占位行「就地升级」为最终 ref（← edit · -N/+N），避免多出/闪断一行
           seenTools[callId] = true
-          sendRef('◈ ' + (tc.name || 'tool') + (arg ? ' · ' + maskSecrets(arg) : ''), 'tool')
+          const ref = toolCallRef(tc.name || 'tool', arg)
+          send('ref', { content: ref.c, cls: ref.cls, uid: uid })
+        } else if (!seenTools[callId]) {
+          seenTools[callId] = true
+          const ref = toolCallRef(tc.name || 'tool', arg)
+          sendRef(ref.c, ref.cls)
         }
         return
       }
@@ -3114,6 +3202,7 @@ $fend('start', (data) => {
     }
     if (t === 'message_end') {
       const msg = ev.message || {}
+      for (const k in streamTc) delete streamTc[k]
       if (msg.provider && msg.model) {
         model = msg.provider + '/' + msg.model
         send('init', { content: '> build · ' + model })
@@ -3142,7 +3231,7 @@ $fend('start', (data) => {
         } else if (switchOnly(etxt)) {
           // transient overload / connection blip — switch directly, no same-model retry, don't mark bad
           if (!switchToNextModel(etxt, 'switch')) fail(etxt.split('\n')[0])
-        } else if (isRetryable(etxt) && retryLeft > 0 && !retrying) {
+        } else if (isRetryable(etxt) && retryLeft > 0 && !retrying && switchLeft > 0) {
           retryLeft--
           const attempt = MAX_RETRY - retryLeft
           const delay = retryDelayMs(retryLeft)
@@ -3156,11 +3245,6 @@ $fend('start', (data) => {
         } else {
           fail(etxt.split('\n')[0])
         }
-      } else if (switchLeft < MAX_SWITCH) {
-        // 当前切换到的模型成功产出了可用回复 —— 重置自动切换次数，下次失败从 1/10 重新计数
-        switchLeft = MAX_SWITCH
-        retryLeft = MAX_RETRY
-        sendRef('✓ ' + (model || 'model') + ' worked · reset switch budget (' + (MAX_SWITCH - switchLeft) + '/' + MAX_SWITCH + ')', 'info')
       }
       return
     }
@@ -3169,9 +3253,11 @@ $fend('start', (data) => {
       const arg = toolArg(ev.args || {})
       if (!seenTools[callId]) {
         seenTools[callId] = true
-        sendRef('◈ ' + (ev.toolName || 'tool') + (arg ? ' · ' + maskSecrets(arg) : ''), 'tool')
+        const ref = toolCallRef(ev.toolName || 'tool', arg)
+        sendRef(ref.c, ref.cls)
       }
       runningTools[callId] = { tool: ev.toolName || 'tool', arg: arg, started: Date.now(), lastUpdate: Date.now(), lastOutput: '' }
+      send('running', { tool: ev.toolName || 'tool', callId: callId })
       return
     }
     if (t === 'tool_execution_update') {
@@ -3188,17 +3274,50 @@ $fend('start', (data) => {
     if (t === 'tool_execution_end') {
       const callId = ev.toolCallId || ev.toolName
       delete runningTools[callId]
-      sendRef((ev.isError ? '✗ ' : '✓ ') + (ev.toolName || 'tool') + (ev.isError ? ' failed' : ' done'), 'tool')
-      const out = extractToolText(ev.result)
+      const tname = ev.toolName || 'tool'
+      let out = extractToolText(ev.result)
+      // edit/write 后台结果里带有的 diff/patch，一并返回前端显示
+      if (!ev.isError && isFileEditTool(tname) && ev.result && ev.result.details) {
+        const patch = ev.result.details.patch || ev.result.details.diff || ''
+        if (patch) out = (out ? out + '\n' : '') + String(patch).slice(0, 6000)
+      }
       if (out) emitOut(callId, maskSecrets(out), (d) => { send('out', { content: d }) })
+      sendRef((ev.isError ? '✗ ' : '✓ ') + tname + (ev.isError ? ' failed' : ' done'), 'tool')
       return
     }
     if (t === 'bash_execution_update') {
       if (ev.delta) send('out', { content: maskSecrets(ev.delta) })
       return
     }
-    if (t === 'compaction_start') { sendRef('↻ compacting…', 'info'); return }
-    if (t === 'compaction_end') { sendRef('✓ context compacted', 'info'); return }
+    if (t === 'compaction_start') {
+      compactingSince = Date.now()
+      send('ref', { content: '↻ compacting…', cls: 'info', uid: 'compact' })
+      send('running', { tool: 'context-compaction', callId: 'compact' })
+      if (!compactTick) {
+        compactTick = setInterval(() => {
+          if (!compactingSince || streamEnded) {
+            if (compactTick) { clearInterval(compactTick); compactTick = null }
+            return
+          }
+          const s = Math.round((Date.now() - compactingSince) / 1000)
+          send('ref', { content: '↻ compacting… (' + s + 's)', cls: 'info', uid: 'compact' })
+        }, 2000)
+      }
+      return
+    }
+    if (t === 'compaction_end') {
+      compactingSince = 0
+      if (compactTick) { clearInterval(compactTick); compactTick = null }
+      const r = ev.result || {}
+      const sum = typeof r.summary === 'string' && r.summary ? String(r.summary).trim() : ''
+      if (sum) send('out', { content: maskSecrets(sum) })
+      let line = '✓ context compacted'
+      if (r.tokensBefore && r.estimatedTokensAfter) {
+        line += ' · ' + Math.round(r.tokensBefore / 1000) + 'k → ' + Math.round(r.estimatedTokensAfter / 1000) + 'k tokens'
+      }
+      sendRef(line, 'info')
+      return
+    }
     if (t === 'auto_retry_start') { autoRetryCount++; sendRef('↻ retrying…', 'info'); return }
     if (t === 'agent_end' || t === 'agent_settled') {
       endRun(0, 'event')
@@ -3377,6 +3496,7 @@ $fend('start', (data) => {
         const rt = runningTools[id]
         if (now - rt.lastUpdate > 10000) {
           sendRef('◈ ' + rt.tool + ' running (' + Math.floor((now - rt.started) / 1000) + 's)', 'tool')
+          send('running', { tool: rt.tool, callId: id })
           rt.lastUpdate = now
         }
         if (rt.lastOutput) emitOut(id, maskSecrets(rt.lastOutput), (d) => { send('out', { content: d }) })
