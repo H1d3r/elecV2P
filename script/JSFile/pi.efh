@@ -60,6 +60,26 @@
     .ctx-bar.warn i { background: #e3b341; }
     .ctx-bar.danger i { background: var(--del); }
     .ctx-num { font-family: 'Cascadia Code', Consolas, monospace; }
+    .header .compact-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 7px; font-size: 12px; font-weight: 500;
+      border: 1px solid var(--bd); background: var(--bk3);
+      color: var(--fc); cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: all .15s;
+    }
+    .header .compact-btn:hover:not(:disabled) {
+      border-color: var(--fc3); background: var(--bk2); color: var(--fc);
+    }
+    .header .compact-btn:disabled { opacity: .55; cursor: not-allowed; }
+    /* 当 token 使用比例 >= 60% 时才用绿色高亮，低于 60% 保持默认灰色 */
+    .header .compact-btn.highlight-green {
+      border-color: rgba(63,185,80,.4); background: rgba(63,185,80,.08);
+      color: var(--ok);
+    }
+    .header .compact-btn.highlight-green:hover:not(:disabled) {
+      border-color: var(--ok); background: rgba(63,185,80,.18); color: #56d364;
+    }
+    .header .compact-btn.busy { border-color: var(--ac); background: rgba(88,166,255,.10); color: var(--ac); }
     .header .load { position: absolute; left: 50%; transform: translateX(-50%); font-size: 22px; color: var(--ac); letter-spacing: 4px; animation: loadPulse 1.2s ease-in-out infinite; }
     @keyframes loadPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
     #modelDropdown { left: auto; right: 0; }
@@ -110,6 +130,8 @@
       border-top-color: var(--ac); border-radius: 50%;
       animation: installSpin .8s linear infinite;
     }
+    .compact-msg { animation: compactPulse 1.5s ease-in-out infinite; }
+    @keyframes compactPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
     .msg { max-width: 85%; padding: 10px 14px; border-radius: 10px; line-height: 1.7; word-break: break-word; font-size: 14px; }
     .msg.user { align-self: flex-end; background: var(--ac); color: #000; border-bottom-right-radius: 2px; }
     .msg.assistant { align-self: flex-start; background: var(--bk2); border: 1px solid var(--bd); border-bottom-left-radius: 2px; }
@@ -159,6 +181,12 @@
       display: inline-block; width: 7px; height: 7px; border-radius: 50%;
       background: var(--ac); margin-left: 8px; vertical-align: middle;
       animation: pulse 1s infinite;
+    }
+    .msg .ref.tool.generating { animation: toolGen 1.4s ease-in-out infinite; border-left-width: 4px; }
+    @keyframes toolGen {
+      0%, 100% { color: var(--fc2); border-left-color: #58a6ff; background: rgba(88,166,255,.08); }
+      33% { color: #d2a8ff; border-left-color: #d2a8ff; background: rgba(210,168,255,.10); }
+      66% { color: #7ee787; border-left-color: #7ee787; background: rgba(126,231,135,.10); }
     }
     .msg .tool-out {
       font-size: 12px; color: var(--fc2); white-space: pre-wrap; word-break: break-all;
@@ -623,6 +651,9 @@
       <span class="ctx-bar" :class="{ warn: ctxPct >= 80 && ctxPct < 95, danger: ctxPct >= 95 }"><i :style="ctxStyle"></i></span>
       <span class="ctx-num">{{ ctxLabel }} · {{ ctxPct }}%</span>
     </span>
+    <button class="compact-btn" :class="{busy: compacting, 'highlight-green': ctxPct >= 60 && ctxLimit > 0}" :disabled="compacting || busy || !sessionId" @click="compactChat" :title="sessionId ? 'Manually compact this session\'s context' : 'No active session'">
+      <span>{{ compacting ? ('Compacting… ' + compactElapsed + 's') : 'Compact' }}</span>
+    </button>
   </div>
 
   <div class="messages" ref="messagesEl">
@@ -643,7 +674,7 @@
       <template v-if="m.role === 'user'">{{ m.content }}</template>
       <template v-else>
         <div v-for="(p, pi) in m.parts" :key="pi">
-          <div v-if="p.t === 'ref'" :class="['ref', p.cls || refClass(p.c)]" :style="p.cls === 'reasoning' && p.body ? 'cursor: pointer;' : ''" @click="p.cls === 'reasoning' && p.body ? (p.open = p.open === undefined ? false : !p.open) : null">{{ p.c }}<span v-if="p.running" class="run-dot"></span></div>
+          <div v-if="p.t === 'ref'" :class="['ref', p.cls || refClass(p.c), p.running ? 'generating' : '']" :style="p.cls === 'reasoning' && p.body ? 'cursor: pointer;' : ''" @click="p.cls === 'reasoning' && p.body ? (p.open = p.open === undefined ? false : !p.open) : null">{{ p.c }}<span v-if="p.running" class="run-dot"></span></div>
           <div v-if="p.t === 'ref' && p.cls === 'reasoning' && p.body && p.open !== false" class="reasoning-body" @scroll="reasoningScroll($event)">{{ p.body }}</div>
           <pre v-else-if="p.t === 'out'" class="tool-out">{{ p.c }}</pre>
           <template v-else-if="p.t === 'text'">
@@ -722,6 +753,7 @@
         notifyMsg: '', notifyShow: false, notifyType: 'error', loading: false,
         piVersion: '', installOverlay: true, installErr: '', installProgress: 'This may take a minute', installLog: [], installCmd: '', installEs: null, installBusy: false,
         ctxUsed: 0, ctxLimit: 0, ctxPct: 0, ctxModel: '',
+        compacting: false, compactRunId: '', compactElapsed: 0, compactTimer: null,
         question: null, qSel: [], qCustom: [], qSubmitting: false, qEl: null,
         workspace: '', wsBusy: false,
         sseMain: null, mainReady: false, sseHandlers: {}, switching: false,
@@ -771,7 +803,7 @@
         if (!this.cmdOpen) return []
         const q = this.inputText.replace(/^\s*\//, '').toLowerCase()
         const out = this.commands.filter((c) => {
-          return !q || c.name.toLowerCase().indexOf(q) === 0 || c.description.toLowerCase().indexOf(q) >= 0
+          return !q || c.name.toLowerCase().indexOf(q) === 0 || c.description.toLowerCase().indexOf(q) === 0
         })
         return out.slice(0, 8)
       },
@@ -1483,6 +1515,46 @@
           this.clearChat()
           return
         }
+        if (/^\/clear\s*$/.test(prompt)) {
+          this.inputText = ''
+          this.$nextTick(() => { self.autosize() })
+          this.clearChat()
+          this.showNotify('Chat cleared')
+          return
+        }
+        if (/^\/compact\s*$/.test(prompt)) {
+          this.inputText = ''
+          this.$nextTick(() => { self.autosize() })
+          self.compactChat()
+          return
+        }
+        const cmdMatch = prompt.match(/^\/(session|model)\s*(.*)/i)
+        if (cmdMatch) {
+          const arg = (cmdMatch[2] || '').trim()
+          if (arg) {
+            this.selectModel(arg)
+            this.showNotify('Model switched to ' + arg)
+          } else {
+            this.toggleDropdown('model')
+            this.showNotify('Select model from dropdown')
+          }
+          this.inputText = ''
+          this.$nextTick(() => { self.autosize() })
+          return
+        }
+        if (/^\/help\s*$/.test(prompt)) {
+          this.inputText = ''
+          this.$nextTick(() => { self.autosize() })
+          const list = (this.commands || []).map((c) => '/' + c.name + ' — ' + c.description).join('  |  ')
+          this.showNotify(list || 'No commands')
+          return
+        }
+        if (/^\/(new|clear|session|model|help)\b/.test(prompt)) {
+          // known command with no further match above; drop the text and ignore
+          this.inputText = ''
+          this.$nextTick(() => { self.autosize() })
+          return
+        }
         if (!this.checkProviderReady()) return
         this.saveHistory(prompt)
         this.inputText = ''
@@ -1505,9 +1577,13 @@
         const flushReasoning = () => {
           if (reasonFlush) { clearTimeout(reasonFlush); reasonFlush = null }
           if (!reasonBuf) return
-          const lastP = el.parts[el.parts.length - 1]
-          if (lastP && lastP.t === 'ref' && lastP.cls === 'reasoning') lastP.body = (lastP.body || '') + reasonBuf
-          else el.parts.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: reasonBuf })
+          let target = null
+          for (let i = el.parts.length - 1; i >= 0; i--) {
+            const p = el.parts[i]
+            if (p.t === 'ref' && p.cls === 'reasoning' && p.reasonBody) { target = p; break }
+          }
+          if (target) target.body = (target.body || '') + reasonBuf
+          else el.parts.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: reasonBuf, reasonBody: true })
           reasonBuf = ''
           self.scrollReasoningBottom()
         }
@@ -1572,7 +1648,7 @@
                 if (found) { found.c = data.content; found.cls = data.cls || '' }
                 else el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '', uid: data.uid })
               } else {
-                el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '' })
+                el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '', reasonBody: data.cls === 'reasoning' && data.content.indexOf('✱') === 0 })
               }
             }
             if (data.type === 'reasoning') {
@@ -1846,7 +1922,88 @@
         try { localStorage.removeItem('aichat_pi_last_session') } catch(e) {}
       },
       compactChat() {
-        this.clearChat()
+        if (this.compacting || this.busy) return
+        if (!this.sessionId) { this.showNotify('No active session to compact'); return }
+        const sid = this.sessionId
+        const self = this
+        const compactId = 'compact-' + Date.now()
+        this.compacting = true
+        this.compactElapsed = 0
+        if (this.compactTimer) clearInterval(this.compactTimer)
+        this.compactTimer = setInterval(() => { self.compactElapsed++ }, 1000)
+        // SSE handler for compact events
+        const onMsg = (data) => {
+          if (!data) return
+          if (data.runId && data.runId !== compactId) return
+          try {
+            if (data.type === 'compact_log' && data.message) {
+              console.log('[compact]', data.message)
+              self.messages.push({
+                role: 'assistant',
+                parts: [{ t: 'text', c: '↻ ' + data.message }],
+                streaming: false
+              })
+              self.scrollBottom()
+              return
+            }
+            if (data.type === 'compaction_start') {
+              self.messages.push({
+                role: 'assistant',
+                parts: [{ t: 'text', c: '↻ Compacting context...', cls: 'compact-msg' }],
+                streaming: false
+              })
+              self.scrollBottom()
+              return
+            }
+            if (data.type === 'compaction_end') {
+              const r = data.result || {}
+              const lines = []
+              if (r.summary) lines.push('Summary: ' + r.summary)
+              if (r.tokensBefore !== undefined) lines.push('Before: ~' + r.tokensBefore + ' tokens')
+              if (r.estimatedTokensAfter !== undefined) lines.push('After: ~' + r.estimatedTokensAfter + ' tokens')
+              if (r.usage) lines.push('Usage: ' + JSON.stringify(r.usage))
+              const msg = lines.join('\n') || 'Compaction finished'
+              self.messages.push({
+                role: 'assistant',
+                parts: [{ t: 'text', c: '↻ ' + msg }],
+                streaming: false
+              })
+              self.scrollBottom()
+              return
+            }
+            if (data.type === 'compact_done') {
+              self.compacting = false
+              if (self.compactTimer) { clearInterval(self.compactTimer); self.compactTimer = null }
+              const r = data.result || {}
+              if (r.estimatedTokensAfter) {
+                self.ctxUsed = r.estimatedTokensAfter
+                if (self.ctxLimit) self.ctxPct = Math.round(self.ctxUsed / self.ctxLimit * 1000) / 10
+              } else if (data.result && data.result.tokensBefore) {
+                // Fallback: if estimatedTokensAfter not set, use tokensBefore as approximation
+                self.ctxUsed = data.result.tokensBefore
+                if (self.ctxLimit) self.ctxPct = Math.round(self.ctxUsed / self.ctxLimit * 1000) / 10
+              }
+              self.showNotify('Context compacted', 'success')
+              return
+            }
+            if (data.type === 'error') {
+              self.compacting = false
+              if (self.compactTimer) { clearInterval(self.compactTimer); self.compactTimer = null }
+              self.showNotify('Compact failed: ' + (data.message || data.error || 'unknown'), 'error')
+              return
+            }
+          } catch(e) {}
+        }
+        this.sseHandlers[compactId] = onMsg
+        this.fetchFend('compact', { runId: compactId, session: sid, model: this.currentModel }, 180000).then((data) => {
+          if (!data || data.ok === false) {
+            onMsg({ type: 'error', message: (data && (data.error || data.message)) || 'compact failed' })
+          }
+        }).catch((e) => {
+          onMsg({ type: 'error', message: e.message || String(e) })
+        }).then(() => {
+          delete this.sseHandlers[compactId]
+        })
       },
       startInstall() {
         if (this.installBusy) return
@@ -2991,7 +3148,12 @@ $fend('workspace_set', (data) => {
 
 $fend('commands', () => {
   return { ok: true, commands: [
-    { name: 'new', description: 'start a new session' }
+    { name: 'new', description: 'start a new session' },
+    { name: 'clear', description: 'clear chat (new session)' },
+    { name: 'compact', description: 'compact context to reduce token usage' },
+    { name: 'session', description: 'switch session / model (use /session <model>)' },
+    { name: 'model', description: 'switch model (use /model <model>)' },
+    { name: 'help', description: 'list commands' }
   ] }
 })
 
@@ -3014,6 +3176,8 @@ $fend('start', (data) => {
   const triedModels = new Set()
   let autoRetryCount = 0   // pi internal auto-retries seen
   let lastErrText = ''     // last errorMessage from events
+  let lastErrAt = 0        // ms timestamp of last errorMessage, to flag error-recovery compaction
+  const hardFails = {}     // per-model consecutive 5xx/network failure count
   let runHadOutput = false // did we stream any text/reasoning/tool output
   let stderrTail = ''      // tail of stderr for exit diagnosis
 
@@ -3042,10 +3206,12 @@ $fend('start', (data) => {
   const seenTools = {}
   const lastToolOut = {}
   const reasoningSeen = {}
+  const openReasoning = new Set() // 仍在输出 thinking、尚未收到 thinking_end 的内容块
   const streamTc = {}
   let tcUidSeq = 0
   let compactingSince = 0
   let compactTick = null
+  let compactTag = '' // 'error recovery' / 'overflow' — carried to the done line
   let watchdog = null
   let aliveTimer = null
   let toolHeartbeat = null
@@ -3156,21 +3322,28 @@ $fend('start', (data) => {
       const ci = ame.contentIndex || 0
       if (at === 'text_delta') {
         const pending = Object.keys(reasoningSeen).filter(k => reasoningSeen[k])
-        for (const k of pending) { reasoningSeen[k] = false; sendRef('✓ reasoning done', 'reasoning') }
+        for (const k of pending) { reasoningSeen[k] = false; openReasoning.delete(k); sendRef('✓ reasoning done', 'reasoning') }
         if (ame.delta) send('text', { content: ame.delta })
         return
       }
       if (at === 'thinking_start' || at === 'thinking_delta') {
-        if (!reasoningSeen[ci]) { reasoningSeen[ci] = true; sendRef('✱ reasoning', 'reasoning') }
+        if (!reasoningSeen[ci]) { reasoningSeen[ci] = true; openReasoning.add(ci); sendRef('✱ reasoning', 'reasoning') }
         if (at === 'thinking_delta' && ame.delta) send('reasoning', { content: ame.delta })
         return
       }
       if (at === 'thinking_end') {
-        if (reasoningSeen[ci]) { reasoningSeen[ci] = false; sendRef('✓ reasoning done', 'reasoning') }
+        if (reasoningSeen[ci]) { reasoningSeen[ci] = false; openReasoning.delete(ci); sendRef('✓ reasoning done', 'reasoning') }
         return
       }
       if (at === 'toolcall_start') {
         // 工具调用正在流式生成（名称要到 toolcall_end 才知道）：先亮占位脉冲，消除静默等待感
+        // deepseek 类后端可能在工具调用之后才补发 thinking_end：
+        // 这里先把仍未结束的 reasoning 块标成 done，保证「✓ reasoning done」行排在工具 ref 之前
+        const open = Array.from(openReasoning)
+        if (open.length) {
+          openReasoning.clear()
+          for (const k of open) { reasoningSeen[k] = false; sendRef('✓ reasoning done', 'reasoning') }
+        }
         const uid = 'tc-' + (++tcUidSeq)
         streamTc[ci] = uid
         send('ref', { content: '◈ generating tool call…', cls: 'tool', uid: uid })
@@ -3203,6 +3376,11 @@ $fend('start', (data) => {
     if (t === 'message_end') {
       const msg = ev.message || {}
       for (const k in streamTc) delete streamTc[k]
+      const leftOpen = Array.from(openReasoning)
+      if (leftOpen.length) {
+        openReasoning.clear()
+        for (const k of leftOpen) { reasoningSeen[k] = false; sendRef('✓ reasoning done', 'reasoning') }
+      }
       if (msg.provider && msg.model) {
         model = msg.provider + '/' + msg.model
         send('init', { content: '> build · ' + model })
@@ -3211,41 +3389,18 @@ $fend('start', (data) => {
         tokens = msg.usage
         emitCtx(msg.usage.totalTokens)
       }
-      if (msg.errorMessage) {
-        const etxt = String(msg.errorMessage)
-        lastErrText = etxt
-        let removed = false
-        if (/\b(400|404|410|502)\b/.test(etxt)) {
-          const mk = model || modelStr || defModel || ''
-          if (mk) {
-            const newly = markBadModels([mk])
-            const errLine = etxt.split('\n')[0].slice(0, 160)
-            sendRef('⚠ ' + mk + ' unavailable · ' + (newly ? 'removed from list' : 'already removed') + ' · ' + errLine, 'info')
-            send('model_removed', { model: mk })  // drop from frontend list even if no further switch happens
-            removed = true
-          }
-        }
-        if (removed) {
-          // model is gone for good — switch to the next available model instead of retrying the same one
-          if (!switchToNextModel(etxt, 'removed')) fail(etxt.split('\n')[0])
-        } else if (switchOnly(etxt)) {
-          // transient overload / connection blip — switch directly, no same-model retry, don't mark bad
-          if (!switchToNextModel(etxt, 'switch')) fail(etxt.split('\n')[0])
-        } else if (isRetryable(etxt) && retryLeft > 0 && !retrying && switchLeft > 0) {
-          retryLeft--
-          const attempt = MAX_RETRY - retryLeft
-          const delay = retryDelayMs(retryLeft)
-          sendRef('↻ transient error, retrying in ' + Math.round(delay / 1000) + 's… (attempt ' + attempt + '/' + MAX_RETRY + ')' + (etxt && etxt !== 'transient error' ? ' · ' + etxt.split('\n')[0] : ''), 'info')
-          retrying = true
-          kickWatchdog()
-          setTimeout(() => { relaunch() }, delay)
-        } else if (isRetryable(etxt)) {
-          // same-model retries exhausted — fall back to switching models
-          if (!switchToNextModel(etxt, 'retry')) fail(etxt.split('\n')[0])
-        } else {
-          fail(etxt.split('\n')[0])
-        }
+      if (!msg.errorMessage) {
+        lastErrAt = 0   // fresh successful response — later compaction is context-driven, not error recovery
+      } else {
+        handleModelError(String(msg.errorMessage))
       }
+      return
+    }
+    if (t === 'error' || t === 'session_error') {
+      // terminal / session-level errors don't always carry a message_end — feed them through the same retry/switch/fail chain
+      const errObj = ev.error || ev || {}
+      const em = typeof errObj === 'string' ? errObj : (errObj.message || errObj.error || errObj.errorMessage || '')
+      handleModelError(String(em || '').split('\n')[0].slice(0, 400))
       return
     }
     if (t === 'tool_execution_start') {
@@ -3291,7 +3446,11 @@ $fend('start', (data) => {
     }
     if (t === 'compaction_start') {
       compactingSince = Date.now()
-      send('ref', { content: '↻ compacting…', cls: 'info', uid: 'compact' })
+      const afterErr = lastErrAt && Date.now() - lastErrAt < 30000
+      const reason = String(ev.reason || '')
+      compactTag = afterErr ? 'error recovery' : (reason === 'overflow' ? 'overflow' : '')
+      const base = '↻ compacting…' + (compactTag ? ' (' + compactTag + ')' : '')
+      send('ref', { content: base, cls: 'info', uid: 'compact' })
       send('running', { tool: 'context-compaction', callId: 'compact' })
       if (!compactTick) {
         compactTick = setInterval(() => {
@@ -3300,7 +3459,7 @@ $fend('start', (data) => {
             return
           }
           const s = Math.round((Date.now() - compactingSince) / 1000)
-          send('ref', { content: '↻ compacting… (' + s + 's)', cls: 'info', uid: 'compact' })
+          send('ref', { content: base + ' (' + s + 's)', cls: 'info', uid: 'compact' })
         }, 2000)
       }
       return
@@ -3311,7 +3470,8 @@ $fend('start', (data) => {
       const r = ev.result || {}
       const sum = typeof r.summary === 'string' && r.summary ? String(r.summary).trim() : ''
       if (sum) send('out', { content: maskSecrets(sum) })
-      let line = '✓ context compacted'
+      let line = '✓ context compacted' + (compactTag ? ' (' + compactTag + ')' : '')
+      compactTag = ''
       if (r.tokensBefore && r.estimatedTokensAfter) {
         line += ' · ' + Math.round(r.tokensBefore / 1000) + 'k → ' + Math.round(r.estimatedTokensAfter / 1000) + 'k tokens'
       }
@@ -3388,6 +3548,11 @@ $fend('start', (data) => {
     if (!etxt) return false
     return /410|429|422|1302|503|limit_burst_rate|rate.?limit|速率限制|请求频率|并发|concurrency|5\d\d|admission_busy|chat_admission|server_error|service_temporarily_unavailable|ResourceExhausted|temporarily|繁忙|timed.?out|timeout|请求超时/i.test(etxt)
   }
+  // connection-level / 5xx "hard" failures: retryable once, but a repeat for the same model means it's broken
+  const isHardFail = (etxt) => {
+    if (!etxt) return false
+    return /(?:^|\D)(?:5\d\d)\b|fetch failed|socket hang|econn|getaddrinfo|network error|netserver|connection (?:refused|reset|closed)|http_50x|initiating request/i.test(etxt)
+  }
   // transient (overload / connection blip / auth denied): skip same-model retry, switch directly — but don't mark bad
   const switchOnly = (etxt) => {
     if (!etxt) return false
@@ -3396,6 +3561,67 @@ $fend('start', (data) => {
   const retryDelayMs = (attemptLeft) => {
     const tried = MAX_RETRY - attemptLeft
     return [5000, 10000, 30000][tried - 1] || 30000
+  }
+  let lastErrKey = ''      // dedupe identical (model, error) fired by different event types
+  let lastErrAt2 = 0
+  // single decision point for every model error (message_end, error/session_error events, exit path).
+  // Guarantees retry -> switch -> fail ordering and never bails out while a relaunch is pending.
+  const handleModelError = (etxt) => {
+    if (!etxt) return
+    lastErrText = etxt
+    lastErrAt = Date.now()
+    const errLine = String(etxt).split('\n')[0].slice(0, 200)
+    const mk = model || modelStr || defModel || ''
+    const key = (mk + '|' + etxt).slice(0, 400)
+    if (key === lastErrKey && Date.now() - lastErrAt2 < 4000) return
+    lastErrKey = key
+    lastErrAt2 = Date.now()
+    let removed = false
+    if (mk && /\b(400|404|410|502)\b/.test(etxt)) {
+      const newly = markBadModels([mk])
+      sendRef('⚠ ' + mk + ' unavailable · ' + (newly ? 'removed from list' : 'already removed') + ' · ' + errLine, 'info')
+      send('model_removed', { model: mk })  // drop from frontend list even if no further switch happens
+      removed = true
+    } else if (mk && isHardFail(etxt)) {
+      hardFails[mk] = (hardFails[mk] || 0) + 1
+      if (hardFails[mk] >= 2) {
+        const newly = markBadModels([mk])
+        sendRef('⚠ ' + mk + ' repeatedly failing (' + hardFails[mk] + 'x 5xx/network) · ' + (newly ? 'removed from list' : 'already removed') + ' · ' + errLine, 'info')
+        send('model_removed', { model: mk })
+        removed = true
+      }
+    }
+    if (removed) {
+      // model is gone for good — switch to the next available model instead of retrying the same one
+      if (!switchToNextModel(etxt, 'removed')) fail(errLine)
+      return
+    }
+    if (switchOnly(etxt)) {
+      // transient overload / connection blip — switch directly, no same-model retry, don't mark bad
+      if (!switchToNextModel(etxt, 'switch')) {
+        if (!retrying) fail(errLine)   // a relaunch is already pending — wait for it instead of dying
+      }
+      return
+    }
+    if (isRetryable(etxt)) {
+      if (retryLeft > 0 && switchLeft > 0) {
+        if (retrying) return           // retry relaunch already scheduled — don't stack another
+        retryLeft--
+        const attempt = MAX_RETRY - retryLeft
+        const delay = retryDelayMs(retryLeft)
+        sendRef('↻ transient error, retrying in ' + Math.round(delay / 1000) + 's… (attempt ' + attempt + '/' + MAX_RETRY + ')' + (etxt && etxt !== 'transient error' ? ' · ' + errLine : ''), 'info')
+        retrying = true
+        kickWatchdog()
+        setTimeout(() => { relaunch() }, delay)
+        return
+      }
+      // same-model retries exhausted — fall back to switching models
+      if (!switchToNextModel(etxt, 'retry')) {
+        if (!retrying) fail(errLine)
+      }
+      return
+    }
+    if (!retrying) fail(errLine)
   }
   // unified end-of-run: recover (switch model) when the run died with error signs but produced no output
   const endRun = (code, via) => {
@@ -3413,7 +3639,7 @@ $fend('start', (data) => {
     }
     const line = ((lastErrText || stderrTail || '').trim().split('\n')[0] || '').slice(0, 200)
     const etxt = line || ('pi exited with code ' + code)
-    if (!switchToNextModel(etxt, 'switch')) fail(etxt)
+    handleModelError(etxt)
   }
 
   const qArg = (val) => {
@@ -3517,6 +3743,7 @@ $fend('start', (data) => {
       pronBreaking = false
       if (streamEnded) return
       retrying = false
+      lastErrKey = ''   // a new attempt is a fresh event, never deduped against the previous one
       spawnProcess()
     }, 500)
   }
@@ -3528,14 +3755,134 @@ $fend('start', (data) => {
 
 $fend('stop', async (data) => {
   if (!data) return { ok: false }
-  const rp = runProcs[data.runId] || $cache.get('pi_run_' + data.runId)
+  const rp = runProcs[data.runId] || $cache.get('pi_run_' + data.runId) || $cache.get('pi_compact_' + data.runId)
   if (rp) {
     killTree(rp)
     try { delete runProcs[data.runId] } catch(e) {}
     try { $cache.delete('pi_run_' + data.runId) } catch(e) {}
+    try { $cache.delete('pi_compact_' + data.runId) } catch(e) {}
     return { ok: true, mode: 'run' }
   }
   return { ok: false, error: 'no active run' }
+})
+
+// Manually compact an existing session's context via pi's RPC mode.
+// Spawns a short-lived pi process that loads the session and runs compact(),
+// then returns immediately so the frontend polls session_ctx for token changes.
+$fend('compact', (data) => {
+  if (!data || !data.session) return { ok: false, error: 'session is required' }
+  const runId = data.runId || 'compact-' + Date.now()
+  const cwd = getWorkDir()
+  const sessionId = String(data.session)
+  const modelStr = (data.model || '').replace(/\r/g, '')
+
+  const send = (type, payload) => {
+    $ws.sse(APP_CH, JSON.stringify(Object.assign({ runId: runId }, payload || {}, { type: type })))
+  }
+
+  // RPC mode: read JSON commands from stdin, write events/responses as JSON lines to stdout
+  const args = ['--mode', 'rpc', '--approve', '--session-id', sessionId]
+  if (modelStr) args.push('--model', modelStr)
+  else {
+    const fallback = collectConfiguredModels(readModelsJson())
+    if (fallback.length) args.push('--model', fallback[0])
+  }
+
+  const env = Object.assign({}, process.env, { NODE_OPTIONS: '--no-warnings', PI_SKIP_VERSION_CHECK: '1', NO_COLOR: '1' })
+
+  return new Promise((resolve) => {
+    let proc = null
+    let buf = ''
+    let resolved = false
+    const REQ_ID = 'req_' + runId
+
+    const finish = (result) => {
+      if (resolved) return
+      resolved = true
+      if (proc) killTree(proc)
+      try { delete runProcs[runId] } catch(e) {}
+      try { $cache.delete('pi_compact_' + runId) } catch(e) {}
+      resolve(result)
+    }
+    const kickWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog)
+      watchdog = setTimeout(() => {
+        send('error', { message: 'compact timeout (180s)' })
+        finish({ ok: false, error: 'timeout' })
+      }, 180000)
+    }
+    let watchdog = null
+    let compactResult = null
+    kickWatchdog()
+    try {
+      proc = spawn(PI_BIN, args, { cwd: cwd, env: env, windowsHide: true, shell: IS_WIN, detached: !IS_WIN, stdio: ['pipe', 'pipe', 'pipe'] })
+    } catch(e) {
+      send('error', { message: 'spawn failed: ' + e.message })
+      return finish({ ok: false, error: 'spawn failed: ' + e.message })
+    }
+    runProcs[runId] = proc
+    try { $cache.set('pi_compact_' + runId, proc) } catch(e) {}
+    proc.stdin.on('error', () => {})
+    proc.stdout.setEncoding('utf8')
+    proc.stdout.on('data', (chunk) => {
+      buf += chunk
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl)
+        buf = buf.slice(nl + 1)
+        if (!line.trim()) continue
+        let ev
+        try { ev = JSON.parse(line.trim()) } catch(e) { continue }
+        if (ev.type === 'response' && ev.id === REQ_ID) {
+          if (ev.success) {
+            send('compact_done', { ok: true, result: compactResult })
+            finish({ ok: true, result: compactResult })
+          } else {
+            const msg = ev.error || 'compact failed'
+            send('error', { message: msg })
+            finish({ ok: false, error: msg })
+          }
+          return
+        }
+        if (ev.type === 'session' && ev.id) {
+          send('session', { id: ev.id })
+        } else if (ev.type === 'compaction_start') {
+          send('compaction_start', {})
+        } else if (ev.type === 'compaction_end') {
+          const r = ev.result || {}
+          compactResult = r
+          send('compaction_end', { ok: true, result: r })
+        }
+        kickWatchdog()
+      }
+    })
+    proc.stderr.setEncoding('utf8')
+    proc.stderr.on('data', (chunk) => {
+      const t = stripAnsi(chunk.toString()).trim()
+      if (t && t.indexOf('Warning:') < 0) {
+        console.log('[pi compact]', t)
+        send('compact_log', { message: t.slice(0, 200) })
+      }
+    })
+    proc.on('error', (e) => {
+      send('error', { message: 'process error: ' + e.message })
+      finish({ ok: false, error: 'process error: ' + e.message })
+    })
+    proc.on('close', (code) => {
+      if (!resolved) {
+        if (code === 0) {
+          send('compact_done', { ok: true })
+          finish({ ok: true })
+        } else {
+          send('error', { message: 'pi exited with code ' + code })
+          finish({ ok: false, error: 'pi exited with code ' + code })
+        }
+      }
+    })
+    setTimeout(() => {
+      try { proc.stdin.write(JSON.stringify({ type: 'compact', id: REQ_ID }) + '\n') } catch(e) {}
+    }, 300)
+  })
 })
 
 const resolveOmniVersion = (tries) => {
