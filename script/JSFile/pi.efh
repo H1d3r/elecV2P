@@ -22,7 +22,7 @@
     #app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .header {
       display: flex; align-items: center; gap: 12px; padding: 12px 22px; position: relative;
-      background: var(--bk2); border-bottom: 1px solid var(--bd); flex-shrink: 0;
+      background: transparent; border-bottom: 1px solid var(--bd); flex-shrink: 0;
     }
     .header h1 { font-size: 16px; color: var(--ac); white-space: nowrap; cursor: pointer; }
     .header h1:hover { opacity: .8; }
@@ -53,7 +53,7 @@
       display: inline-flex; align-items: center; gap: 6px;
       margin-right: 12px; font-size: 11px; color: var(--fc2); white-space: nowrap;
       cursor: default; border: 1px solid var(--bd); border-radius: 8px; padding: 2px 8px;
-      background: var(--bk3);
+      background: transparent;
     }
     .ctx-bar { width: 56px; height: 5px; border-radius: 3px; background: var(--bd); overflow: hidden; }
     .ctx-bar i { display: block; height: 100%; background: var(--ac); border-radius: 3px; }
@@ -63,12 +63,12 @@
     .header .compact-btn {
       display: inline-flex; align-items: center; gap: 5px;
       padding: 4px 10px; border-radius: 7px; font-size: 12px; font-weight: 500;
-      border: 1px solid var(--bd); background: var(--bk3);
+      border: 1px solid var(--bd); background: transparent;
       color: var(--fc); cursor: pointer; white-space: nowrap; flex-shrink: 0;
       transition: all .15s;
     }
     .header .compact-btn:hover:not(:disabled) {
-      border-color: var(--fc3); background: var(--bk2); color: var(--fc);
+      border-color: var(--fc3); background: transparent; color: var(--fc);
     }
     .header .compact-btn:disabled { opacity: .55; cursor: not-allowed; }
     /* 当 token 使用比例 >= 60% 时才用绿色高亮，低于 60% 保持默认灰色 */
@@ -83,12 +83,12 @@
     .header .theme-btn {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 4px 10px; border-radius: 7px; font-size: 12px;
-      border: 1px solid var(--bd); background: var(--bk3);
+      border: 1px solid var(--bd); background: transparent;
       color: var(--fc); cursor: pointer; white-space: nowrap; flex-shrink: 0;
       transition: all .15s;
     }
     .header .theme-btn:hover {
-      border-color: var(--fc3); background: var(--bk2); color: var(--fc);
+      border-color: var(--fc3); background: transparent; color: var(--fc);
     }
     .header .theme-btn .theme-icon {
       font-size: 14px;
@@ -98,7 +98,7 @@
     #modelDropdown { left: auto; right: 0; }
     .dropdown {
       position: absolute; top: 100%; left: 0; margin-top: 4px;
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 8px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 8px;
       min-width: 260px; max-height: 350px; overflow-y: hidden; z-index: 200; display: none; flex-direction: column;
       box-shadow: 0 8px 24px rgba(0,0,0,.4); display: none;
     }
@@ -115,7 +115,7 @@
     .dropdown .d-empty { padding: 20px; text-align: center; color: var(--fc3); font-size: 12px; }
     .dropdown .d-more { padding: 8px 12px; text-align: center; font-size: 12px; color: var(--ac); cursor: pointer; border-top: 1px solid var(--bd); }
     .dropdown .d-more:hover { background: var(--bk3); }
-    .dropdown .d-foot { position: relative; padding: 7px 12px; text-align: center; font-size: 11px; color: var(--fc3); border-top: 1px solid var(--bd); background: var(--bk2); }
+    .dropdown .d-foot { position: relative; padding: 7px 12px; text-align: center; font-size: 11px; color: var(--fc3); border-top: 1px solid var(--bd); background: transparent; }
     .dropdown .d-list { overflow-y: auto; flex: 1; min-height: 0; }
     .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
     .welcome { color: var(--fc2); text-align: center; margin: auto; font-size: 15px; line-height: 1.9; max-width: 560px; width: 100%; padding: 16px; }
@@ -129,7 +129,7 @@
     .w-tip {
       display: flex; align-items: baseline; gap: 9px;
       border: 1px solid var(--bd); border-radius: 9px; padding: 8px 12px;
-      background: var(--bk2); cursor: pointer; transition: all .15s; line-height: 1.55;
+      background: transparent; cursor: pointer; transition: all .15s; line-height: 1.55;
     }
     .w-tip:hover { border-color: var(--ac); background: rgba(88,166,255,.07); }
     .w-tip .t-icon { color: var(--ac); font-size: 13px; flex-shrink: 0; }
@@ -148,7 +148,7 @@
     @keyframes compactPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
     .msg { max-width: 85%; padding: 10px 14px; border-radius: 10px; line-height: 1.7; word-break: break-word; font-size: 14px; }
     .msg.user { align-self: flex-end; background: var(--ac); color: #000; border-bottom-right-radius: 2px; }
-    .msg.assistant { align-self: flex-start; background: var(--bk2); border: 1px solid var(--bd); border-bottom-left-radius: 2px; }
+    .msg.assistant { align-self: flex-start; background: transparent; border: 1px solid var(--bd); border-bottom-left-radius: 2px; }
     .msg.error { align-self: flex-start; background: #2d1215; border: 1px solid #5b2a2e; color: var(--del); }
     .msg .meta { font-size: 11px; color: var(--fc3); margin-top: 8px; border-top: 1px solid var(--bd); padding-top: 6px; }
     .msg.user .meta { color: rgba(0,0,0,.4); }
@@ -161,7 +161,7 @@
     .msg.assistant h1 { font-size: 1.3em; } .msg.assistant h2 { font-size: 1.15em; } .msg.assistant h3 { font-size: 1.05em; }
     .msg.assistant table { border-collapse: collapse; margin: .5em 0; width: 100%; }
     .msg.assistant th, .msg.assistant td { border: 1px solid var(--bd); padding: 4px 8px; font-size: 13px; }
-    .msg.assistant th { background: var(--bk3); }
+    .msg.assistant th { background: transparent; }
     .msg.assistant a { color: var(--ac); text-decoration: none; }
     .msg.assistant a:hover { text-decoration: underline; }
     .msg.assistant hr { border: none; border-top: 1px solid var(--bd); margin: .6em 0; }
@@ -169,7 +169,7 @@
     .msg.assistant code { font-family: 'Cascadia Code','Fira Code','Consolas',monospace; font-size: 13px; }
     .msg.assistant :not(pre) > code { background: var(--bk3); padding: 1px 5px; border-radius: 4px; }
     .msg.assistant pre {
-      background: var(--code-bk); padding: 12px; border-radius: 6px; overflow-x: auto;
+      background: transparent; padding: 12px; border-radius: 6px; overflow-x: auto;
       margin: .5em 0; border: 1px solid var(--bd); position: relative;
     }
     .msg.assistant pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
@@ -205,7 +205,7 @@
     .msg .tool-out {
       font-size: 12px; color: var(--fc2); white-space: pre-wrap; word-break: break-all;
       font-family: 'Cascadia Code','Fira Code','Consolas','Courier New',monospace;
-      background: rgba(255,255,255,.03); border: 1px solid var(--bd); border-radius: 6px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 6px;
       padding: 6px 10px; margin: 4px 0; line-height: 1.5; max-height: 260px; overflow-y: auto;
     }
     .msg .stream-text { white-space: pre-wrap; word-break: break-word; line-height: 1.7; }
@@ -220,7 +220,7 @@
     .reasoning summary::before { content: '> '; color: var(--fc3); font-family: monospace; }
     .reasoning[open] summary::before { content: 'v '; }
     .reasoning-body {
-      font-size: 12px; color: var(--fc2); background: var(--bk3);
+      font-size: 12px; color: var(--fc2); background: transparent;
       padding: 8px 10px; border-radius: 6px; margin-top: 4px; line-height: 1.5;
       white-space: pre-wrap; font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
       max-height: 300px; overflow-y: auto;
@@ -238,7 +238,7 @@
     }
     .theme-panel {
       width: min(480px, 94vw); max-height: 86vh; overflow-y: auto;
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 12px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 12px;
       padding: 22px; display: flex; flex-direction: column; gap: 16px;
       position: relative;
     }
@@ -259,7 +259,7 @@
       border: 1px solid var(--bd); background: var(--bk3);
       transition: all .15s;
     }
-    .theme-item:hover { border-color: var(--fc3); background: var(--bk2); }
+    .theme-item:hover { border-color: var(--fc3); background: transparent; }
     .theme-item.active { border-color: var(--ac); background: rgba(88,166,255,.08); }
     .theme-name { font-size: 14px; color: var(--fc); font-weight: bold; margin-bottom: 4px; }
     .theme-desc { font-size: 12px; color: var(--fc2); }
@@ -273,7 +273,7 @@
     }
     .session-panel {
       position: fixed; left: -320px; top: 0; bottom: 0; width: 300px;
-      background: var(--bk2); border-right: 1px solid var(--bd);
+      background: transparent; border-right: 1px solid var(--bd);
       transition: left .25s; z-index: 100; display: flex; flex-direction: column;
     }
     .session-panel.open { left: 0; }
@@ -339,11 +339,11 @@
     }
     .input-bar {
       display: flex; gap: 8px; padding: 12px 16px;
-      background: var(--bk2); border-top: 1px solid var(--bd); flex-shrink: 0;
+      background: transparent; border-top: 1px solid var(--bd); flex-shrink: 0;
     }
     .input-bar textarea {
       flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--bd);
-      background: var(--bk3); color: var(--fc); font-family: inherit; font-size: 14px;
+      background: transparent; color: var(--fc); font-family: inherit; font-size: 14px;
       resize: none; outline: none; min-height: 42px; max-height: 160px;
     }
     .input-bar textarea::placeholder { color: var(--fc3); }
@@ -357,7 +357,7 @@
     .cmd-wrap { position: relative; flex-shrink: 0; }
     .cmd-dropdown {
       position: absolute; left: 16px; right: 16px; bottom: calc(100% + 4px);
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 10px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 10px;
       box-shadow: 0 6px 24px rgba(0,0,0,.35); max-height: 220px; overflow-y: auto; z-index: 50;
     }
     .cmd-item {
@@ -382,7 +382,7 @@
     }
     .install-overlay .log {
       max-width: 80%; width: 640px; max-height: 280px; overflow-y: auto;
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 6px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 6px;
       padding: 10px 12px; font-family: monospace; font-size: 11px; line-height: 1.5;
       color: var(--fc2); text-align: left; white-space: pre-wrap; word-break: break-all;
     }
@@ -396,7 +396,7 @@
       padding: 8px 20px; border: 1px solid var(--bd); border-radius: 6px;
       background: var(--bk3); color: var(--fc); font-size: 13px; cursor: pointer;
     }
-    .install-overlay button:hover { background: var(--bk2); }
+    .install-overlay button:hover { background: transparent; }
     @keyframes installSpin { to { transform: rotate(360deg) } }
     .provider-overlay {
       position: fixed; inset: 0; z-index: 9997;
@@ -406,7 +406,7 @@
     }
     .provider-panel {
       width: min(560px, 94vw); max-height: 86vh; overflow-y: auto;
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 12px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 12px;
       padding: 22px; display: flex; flex-direction: column; gap: 10px;
       position: relative;
     }
@@ -463,7 +463,7 @@
     }
     .custom-panel {
       width: min(520px, 94vw); max-height: 86vh; overflow-y: auto;
-      background: var(--bk2); border: 1px solid var(--bd); border-radius: 12px;
+      background: transparent; border: 1px solid var(--bd); border-radius: 12px;
       padding: 22px; display: flex; flex-direction: column; gap: 12px;
     }
     .custom-panel .cp-title { font-size: 16px; color: var(--fc); font-weight: bold; }
@@ -499,7 +499,7 @@
     .notify.show { opacity: 1; }
     .todo-panel {
       flex-shrink: 0; max-height: 140px; overflow-y: auto;
-      background: var(--bk2); border-top: 1px solid var(--bd);
+      background: transparent; border-top: 1px solid var(--bd);
       padding: 8px 16px; font-size: 12px; color: var(--fc2);
     }
     .todo-panel .todo-head { font-size: 11px; color: var(--fc3); margin-bottom: 4px; }
@@ -512,7 +512,7 @@
     .msg .meta.ok { color: var(--ok); }
     .msg .meta.err { color: var(--del); }
     .question-panel {
-      flex-shrink: 0; background: var(--bk2); border-top: 1px solid var(--bd);
+      flex-shrink: 0; background: transparent; border-top: 1px solid var(--bd);
       padding: 10px 16px; max-height: 45%; overflow-y: auto;
     }
     .question-panel .q-item { margin-bottom: 12px; }
@@ -653,16 +653,16 @@
       <div class="theme-title">选择主题</div>
       <div class="theme-sub">选择 elecV2P 的主题来同步应用到 Pi 界面</div>
       <div class="theme-list">
-        <div class="theme-item" v-if="!currentTheme" @click="selectTheme(null)">
+        <div class="theme-item" :class="{active: !currentTheme}" @click="selectTheme(null)">
           <div class="theme-name">默认主题</div>
           <div class="theme-desc">Pi 的原始深色主题</div>
         </div>
-        <div v-if="elecV2PTheme && elecV2PTheme.simple" class="theme-item" @click="selectTheme(elecV2PTheme.simple)">
+        <div v-if="elecV2PTheme && elecV2PTheme.simple" class="theme-item" :class="{active: currentTheme === elecV2PTheme.simple}" @click="selectTheme(elecV2PTheme.simple)">
           <div class="theme-name">当前 elecV2P 主题</div>
           <div class="theme-desc">同步 elecV2P 当前使用的主题</div>
         </div>
         <div v-if="elecV2PTheme && elecV2PTheme.list" class="theme-section">预设主题</div>
-        <div v-for="(theme, idx) in elecV2PTheme.list" :key="idx" class="theme-item" @click="selectTheme(theme)">
+        <div v-for="(theme, idx) in elecV2PTheme.list" :key="idx" class="theme-item" :class="{active: currentTheme === theme}" @click="selectTheme(theme)">
           <div class="theme-name">{{ theme.name }}</div>
           <div class="theme-desc">主色调: {{ theme.mainbk || '未设置' }} · 文字色: {{ theme.maincl || '未设置' }}</div>
         </div>
@@ -737,7 +737,7 @@
           <div class="d-title">auto</div><div class="d-sub">default model</div>
         </div>
         <div class="d-filter">
-          <input type="text" ref="modelFilterInput" v-model="modelFilter" placeholder="Filter models..." @click.stop @input="modelFilter = $event.target.value; modelNavIdx = 0" @keydown.up.prevent="modelNav(-1)" @keydown.down.prevent="modelNav(1)" @keydown.enter.prevent="modelNavSelect()" @keydown.esc.prevent="dropdown = ''; modelNavIdx = 0; $nextTick(() => { $refs.inputEl?.focus() })" spellcheck="false" style="width:100%;padding:6px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--bk);color:var(--fc);font-size:12px;outline:none;box-sizing:border-box;">
+          <input type="text" ref="modelFilterInput" v-model="modelFilter" placeholder="Filter models..." @click.stop @input="modelFilter = $event.target.value; modelNavIdx = 0" @keydown.up.prevent="modelNav(-1)" @keydown.down.prevent="modelNav(1)" @keydown.enter.prevent="modelNavSelect()" @keydown.esc.prevent="dropdown = ''; modelNavIdx = 0; $nextTick(() => { $refs.inputEl?.focus() })" spellcheck="false" style="width:100%;padding:6px 10px;border:1px solid var(--bd);border-radius:6px;background:transparent;color:var(--fc);font-size:12px;outline:none;box-sizing:border-box;">
         </div>
         <div class="d-list">
           <div v-for="(m, mi) in filteredModels" :key="m" :class="['d-item', {active: m===currentModel, nav: mi===modelNavIdx}]" @click="selectModel(m)" @mouseenter="modelNavIdx = mi">
@@ -1065,6 +1065,22 @@
       selectTheme(theme) {
         this.applyTheme(theme)
         this.themeSelectorOpen = false
+        // 记住用户的选择，刷新后恢复（default / simple / list:index / 原始对象兜底）
+        let sel
+        if (!theme) {
+          sel = 'default'
+        } else if (this.elecV2PTheme && theme === this.elecV2PTheme.simple) {
+          sel = 'simple'
+        } else if (this.elecV2PTheme && this.elecV2PTheme.list) {
+          const idx = this.elecV2PTheme.list.indexOf(theme)
+          sel = idx >= 0 ? ('list:' + idx) : 'json'
+        } else {
+          sel = 'json'
+        }
+        try {
+          if (sel === 'json') localStorage.setItem('aichat_pi_theme', JSON.stringify(theme))
+          else localStorage.setItem('aichat_pi_theme', sel)
+        } catch (e) {}
       },
       scrollToCurrentModel() {
         const dropdownEl = document.getElementById('modelDropdown')
@@ -1378,8 +1394,20 @@
         }).then((r) => { return r.json() }).then((data) => {
           if (data && data.theme) {
             self.elecV2PTheme = data.theme
-            // 应用当前主题
-            self.applyTheme(self.elecV2PTheme.simple || {})
+            // 恢复用户上次选择的主题；未选择过或选了默认则保持 Pi 原生主题
+            let sel = null
+            try { sel = localStorage.getItem('aichat_pi_theme') } catch (e) {}
+            if (sel && sel !== 'default') {
+              if (sel === 'simple') {
+                self.applyTheme(self.elecV2PTheme.simple || {})
+              } else if (typeof sel === 'string' && sel.indexOf('list:') === 0) {
+                const idx = parseInt(sel.slice(5), 10)
+                const t = self.elecV2PTheme.list && self.elecV2PTheme.list[idx]
+                if (t) self.applyTheme(t)
+              } else {
+                try { self.applyTheme(JSON.parse(sel)) } catch (e) {}
+              }
+            }
           }
         }).catch(() => {})
       },
