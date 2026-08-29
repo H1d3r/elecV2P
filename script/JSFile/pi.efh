@@ -245,7 +245,14 @@
     }
     .ws-row button:hover { color: var(--fc); border-color: var(--fc3); }
     .ws-row button:disabled { opacity: .4; cursor: not-allowed; }
-    .session-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .session-list { flex: 1; overflow-y: auto; padding: 8px; outline: none; box-shadow: none; }
+    /* 移除 session-list 的 focus 样式 */
+    .session-list:focus,
+    .session-list:focus-visible {
+      outline: none;
+      box-shadow: none;
+      border: none;
+    }
     .session-item {
       padding: 10px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 4px;
       border: 1px solid transparent; transition: all .15s; position: relative;
@@ -253,6 +260,14 @@
     .session-item:hover { background: var(--bk3); border-color: var(--bd); }
     .session-item.active { background: var(--bk3); border-color: var(--ac); }
     .session-item.nav { background: var(--bk3); border-color: var(--ac); }
+    /* 移除 session-item 的 focus 样式 */
+    .session-item:focus,
+    .session-item:focus-visible {
+      outline: none;
+      border-color: transparent;
+      box-shadow: none;
+      -webkit-tap-highlight-color: transparent;
+    }
     .session-item .s-time { font-size: 11px; color: var(--fc3); }
     .session-item .s-prompt { font-size: 13px; color: var(--fc); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-item .s-preview { font-size: 12px; color: var(--fc2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -587,7 +602,7 @@
       <input v-model="workspace" placeholder="pi workspace (project dir) — agent reads/writes files here" @keydown.enter.prevent="setWorkspace" spellcheck="false">
       <button @click="setWorkspace" :disabled="wsBusy">set</button>
     </div>
-    <div class="session-list" tabindex="0" @keydown="onSessionPanelKey" ref="sessionListEl">
+    <div class="session-list" @keydown="onSessionPanelKey" ref="sessionListEl">
       <template v-if="pinnedSessions.length">
         <div class="section-label">PINNED</div>
         <div v-for="(s, i) in pinnedSessions" :key="'p'+s.id" class="session-item"
@@ -642,7 +657,7 @@
           <div class="d-title">auto</div><div class="d-sub">default model</div>
         </div>
         <div class="d-filter">
-          <input type="text" ref="modelFilterInput" v-model="modelFilter" placeholder="Filter models..." @click.stop @input="modelFilter = $event.target.value; modelNavIdx = 0" @keydown.up.prevent="modelNav(-1)" @keydown.down.prevent="modelNav(1)" @keydown.enter.prevent="modelNavSelect()" @keydown.esc.prevent="dropdown = ''; modelNavIdx = 0" spellcheck="false" style="width:100%;padding:6px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--bk);color:var(--fc);font-size:12px;outline:none;box-sizing:border-box;">
+          <input type="text" ref="modelFilterInput" v-model="modelFilter" placeholder="Filter models..." @click.stop @input="modelFilter = $event.target.value; modelNavIdx = 0" @keydown.up.prevent="modelNav(-1)" @keydown.down.prevent="modelNav(1)" @keydown.enter.prevent="modelNavSelect()" @keydown.esc.prevent="dropdown = ''; modelNavIdx = 0; $nextTick(() => { $refs.inputEl?.focus() })" spellcheck="false" style="width:100%;padding:6px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--bk);color:var(--fc);font-size:12px;outline:none;box-sizing:border-box;">
         </div>
         <div class="d-list">
           <div v-for="(m, mi) in filteredModels" :key="m" :class="['d-item', {active: m===currentModel, nav: mi===modelNavIdx}]" @click="selectModel(m)" @mouseenter="modelNavIdx = mi">
@@ -938,30 +953,57 @@
       },
       modelNavSelect() {
         const m = this.filteredModels[this.modelNavIdx]
-        if (m !== undefined) { this.selectModel(m); this.dropdown = '' }
+        if (m !== undefined) { 
+          this.selectModel(m); 
+          this.dropdown = ''
+          this.$nextTick(() => { this.$refs.inputEl?.focus() })
+        }
       },
       toggleDropdown(which) {
+        const wasOpen = this.dropdown === which
         this.dropdown = this.dropdown === which ? '' : which
-        if (this.dropdown === 'model') { this.modelNavIdx = 0 }
+        if (this.dropdown === 'model') { 
+          this.modelNavIdx = 0 
+        } else if (wasOpen) {
+          // 如果关闭了下拉菜单，返回焦点到输入框
+          this.$nextTick(() => { this.$refs.inputEl?.focus() })
+        }
       },
       viewAll() {
         this.dropdown = ''
         this.openSessionPanel()
+        // 保持焦点在输入框，因为会话面板是另一个UI元素
       },
       openSessionPanel() {
         this.sessionPanelOpen = true
         this.loadSessions().then(() => {
           this.sessionNavIdx = 0
           this.$nextTick(() => {
-            const el = this.$refs.sessionListEl
-            if (el && el.focus) el.focus()
             this.sessionScrollNavIntoView()
+            // 再下一个 tick 设置焦点，确保所有DOM更新完成
+            this.$nextTick(() => {
+              const el = this.$refs.sessionListEl
+              if (el) {
+                // 临时设置 tabindex 以接收键盘事件
+                el.setAttribute('tabindex', '0')
+                el.focus()
+                // 在关闭时移除 tabindex
+                this.$once('hook:beforeUnmount', () => {
+                  el.removeAttribute('tabindex')
+                })
+              }
+            })
           })
         })
       },
       closeSessionPanel(focusInput) {
         this.sessionPanelOpen = false
         this.$nextTick(() => {
+          // 移除 tabindex
+          const sessionEl = this.$refs.sessionListEl
+          if (sessionEl) {
+            sessionEl.removeAttribute('tabindex')
+          }
           const el = this.$refs.inputEl
           if (el && el.focus) el.focus()
         })
@@ -989,17 +1031,39 @@
       sessionNavSelect() {
         const list = this.sessionFlatList()
         const item = list[this.sessionNavIdx]
-        if (!item) { this.showNotify('No session selected'); return }
+        if (!item) { this.showNotify('No session selected', 'error'); return }
         this.selectSession(item.id)
         this.closeSessionPanel()
         this.showNotify('Session ' + (item.id || '').slice(0, 8) + ' loaded')
       },
       onSessionPanelKey(e) {
         if (!this.sessionPanelOpen) return
-        if (e.key === 'ArrowDown') { e.preventDefault(); this.sessionNav(1) }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); this.sessionNav(-1) }
-        else if (e.key === 'Enter') { e.preventDefault(); this.sessionNavSelect() }
-        else if (e.key === 'Escape') { e.preventDefault(); this.closeSessionPanel() }
+        if (e.key === 'ArrowDown') { 
+          e.preventDefault(); 
+          this.sessionNav(1) 
+        }
+        else if (e.key === 'ArrowUp') { 
+          e.preventDefault(); 
+          this.sessionNav(-1) 
+        }
+        else if (e.key === 'Enter') { 
+          e.preventDefault(); 
+          this.sessionNavSelect() 
+        }
+        else if (e.key === 'Escape') { 
+          e.preventDefault(); 
+          this.closeSessionPanel() 
+        }
+      },
+      // 添加一个测试方法来验证键盘事件绑定
+      testKeyboardBinding() {
+        const el = this.$refs.sessionListEl
+        if (el) {
+          console.log('Testing keyboard binding...')
+          // 模拟键盘事件
+          const downEvent = new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown' })
+          el.dispatchEvent(downEvent)
+        }
       },
       pickTip(text) {
         if (this.busy) return
@@ -1015,7 +1079,7 @@
       },
       showNotify(msg, type) {
         this.notifyMsg = msg
-        this.notifyType = type === 'success' ? 'success' : 'error'
+        this.notifyType = type === 'error' ? 'error' : 'success'
         this.notifyShow = true
         clearTimeout(notifyTimer)
         notifyTimer = setTimeout(() => { this.notifyShow = false }, 6000)
@@ -1035,23 +1099,23 @@
             self.clearChat()
             self.loadSessions()
           } else {
-            self.showNotify('set failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('set failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.wsBusy = false
-          self.showNotify('set workspace error: ' + e.message)
+          self.showNotify('set workspace error: ' + e.message, 'error')
         })
       },
       loadSessions() {
         const self = this
         this.loading = true
         return Promise.all([
-          this.fetchFend('sessions', {}, 10000).catch((e) => { self.showNotify('sessions: ' + e.message); return { pinned: [] } }),
-          this.fetchFend('models', {}, 15000).catch((e) => { self.showNotify('models: ' + e.message); return { models: [] } })
+          this.fetchFend('sessions', {}, 10000).catch((e) => { self.showNotify('sessions: ' + e.message, 'error'); return { pinned: [] } }),
+          this.fetchFend('models', {}, 15000).catch((e) => { self.showNotify('models: ' + e.message, 'error'); return { models: [] } })
         ]).then((results) => {
           self.models = (results[1] && results[1].models) || []
           self.pinnedSessions = (results[0] && results[0].pinned) || []
-          return self.fetchFend('pi_sessions', {}, 8000).catch((e) => { self.showNotify('pi sessions: ' + e.message); return { sessions: [] } })
+          return self.fetchFend('pi_sessions', {}, 8000).catch((e) => { self.showNotify('pi sessions: ' + e.message, 'error'); return { sessions: [] } })
         }).then((oc) => {
           if (oc && oc.sessions) self.sessions = oc.sessions
           return self.fetchFend('workspace', {}, 8000).catch(() => ({}))
@@ -1079,12 +1143,13 @@
         this.currentModel = model
         localStorage.setItem('aichat_pi_last_model', this.currentModel)
         this.dropdown = ''
+        this.$nextTick(() => { this.$refs.inputEl?.focus() })
         this.refreshCtx()
         this.loadProviders().catch(() => {})
         if (pidx > 0 && model.slice(0, pidx) !== 'omniroute') {
           const sel = (this.providerList || []).find((x) => x.name === model.slice(0, pidx))
           if (sel && !sel.keySet) {
-            this.showNotify('Please enter the API key for ' + sel.name + ' first')
+            this.showNotify('Please enter the API key for ' + sel.name + ' first', 'error')
             this.showProviderPicker()
           }
         }
@@ -1093,6 +1158,7 @@
         this.currentModel = (m || '').replace(/\r/g, '')
         localStorage.setItem('aichat_pi_last_model', this.currentModel)
         this.dropdown = ''
+        this.$nextTick(() => { this.$refs.inputEl?.focus() })
         this.refreshCtx()
         this.loadProviders().catch(() => {})
       },
@@ -1101,6 +1167,7 @@
         this.sessionId = id
         localStorage.setItem('aichat_pi_last_session', id)
         this.dropdown = ''
+        this.$nextTick(() => { this.$refs.inputEl?.focus() })
         this.loadSessions()
         this.syncCtx(id)
         if (!(this.busy && id === prev)) this.loadSessionMessages(id)
@@ -1126,7 +1193,7 @@
           self.loadSessions()
           self.showNotify('Session deleted', 'success')
         }).catch((e) => {
-          self.showNotify('Delete failed: ' + e.message)
+          self.showNotify('Delete failed: ' + e.message, 'error')
         }).then(() => { delete self.deleting[id] })
       },
       deleteOCSession(id) {
@@ -1139,10 +1206,10 @@
             self.loadSessions()
             self.showNotify('Session deleted', 'success')
           } else {
-            self.showNotify('Delete failed: ' + (data.error || 'unknown'))
+            self.showNotify('Delete failed: ' + (data.error || 'unknown'), 'error')
           }
         }).catch((e) => {
-          self.showNotify('Delete failed: ' + e.message)
+          self.showNotify('Delete failed: ' + e.message, 'error')
         }).then(() => { delete self.deleting[id] })
       },
       autosize() {
@@ -1244,11 +1311,11 @@
               }
             })
           } else {
-            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.providerBusy = false
-          self.showNotify('Failed: ' + e.message)
+          self.showNotify('Failed: ' + e.message, 'error')
         })
       },
       useOmniRoute() {
@@ -1305,10 +1372,10 @@
                     else self.selectModel('')
                   })
                 } else {
-                  self.showNotify('Failed to save config: ' + ((data && data.error) || 'unknown'))
+                  self.showNotify('Failed to save config: ' + ((data && data.error) || 'unknown'), 'error')
                 }
               }).catch((err) => {
-                self.showNotify('Failed: ' + err.message)
+                self.showNotify('Failed: ' + err.message, 'error')
               })
               return
             }
@@ -1341,10 +1408,10 @@
                   else self.selectModel('')
                 })
               } else {
-                self.showNotify('Failed to save config: ' + ((sav && sav.error) || 'unknown'))
+                self.showNotify('Failed to save config: ' + ((sav && sav.error) || 'unknown'), 'error')
               }
             }).catch((err) => {
-              self.showNotify('Failed: ' + err.message)
+              self.showNotify('Failed: ' + err.message, 'error')
             })
           } else if (data && !data.ok && data.error) {
             es.close()
@@ -1381,7 +1448,7 @@
       fetchCustomModels() {
         const self = this
         const baseUrl = (this.customForm.baseUrl || '').trim()
-        if (!baseUrl) { this.showNotify('Please enter a base URL first'); return }
+        if (!baseUrl) { this.showNotify('Please enter a base URL first', 'error'); return }
         if (this.customFetchBusy) return
         this.customFetchBusy = true
         this.fetchFend('provider_fetch_models', {
@@ -1400,11 +1467,11 @@
               self.showNotify('Provider returned an empty model list')
             }
           } else {
-            self.showNotify('Fetch failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Fetch failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.customFetchBusy = false
-          self.showNotify('Fetch failed: ' + e.message)
+          self.showNotify('Fetch failed: ' + e.message, 'error')
         })
       },
       saveCustomProvider() {
@@ -1412,11 +1479,11 @@
         const name = (this.customForm.name || '').trim().replace(/\s+/g, '-').toLowerCase()
         const baseUrl = (this.customForm.baseUrl || '').trim()
         const apiKey = (this.customForm.apiKey || '').trim()
-        if (!name) { this.showNotify('Please enter a provider name'); return }
-        if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) { this.showNotify('Name must be letters/numbers/hyphens only'); return }
-        if (!baseUrl) { this.showNotify('Please enter a base URL'); return }
+        if (!name) { this.showNotify('Please enter a provider name', 'error'); return }
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) { this.showNotify('Name must be letters/numbers/hyphens only', 'error'); return }
+        if (!baseUrl) { this.showNotify('Please enter a base URL', 'error'); return }
         const existing = (this.providerList || []).find((x) => x.name === name)
-        if (!apiKey && !(existing && existing.keySet)) { this.showNotify('Please enter an API key'); return }
+        if (!apiKey && !(existing && existing.keySet)) { this.showNotify('Please enter an API key', 'error'); return }
         this.customBusy = true
         this.fetchFend('provider_custom_save', {
           name: name, baseUrl: baseUrl, apiKey: apiKey, api: this.customForm.api,
@@ -1434,18 +1501,18 @@
               else self.selectModel('')
             })
           } else {
-            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.customBusy = false
-          self.showNotify('Failed: ' + e.message)
+          self.showNotify('Failed: ' + e.message, 'error')
         })
       },
       deleteProvider(name) {
         const self = this
         if (!name) return
         if (this.providerList.find((p) => p.name === name && p.current)) {
-          this.showNotify('Cannot delete the current provider. Switch provider first.')
+          this.showNotify('Cannot delete the current provider. Switch provider first.', 'error')
           return
         }
         if (!confirm('Delete provider "' + name + '"?')) return
@@ -1456,11 +1523,11 @@
             self.showNotify('Provider ' + name + ' deleted', 'success')
             self.loadProviders().catch(() => {})
           } else {
-            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.providerBusy = false
-          self.showNotify('Failed: ' + e.message)
+          self.showNotify('Failed: ' + e.message, 'error')
         })
       },
       loadHistory() {
@@ -1514,6 +1581,7 @@
           e.preventDefault()
           this.dropdown = ''
           this.modelNavIdx = 0
+          this.$nextTick(() => { this.$refs.inputEl?.focus() })
           return
         }
         if (this.cmdOpen && this.cmdFiltered.length) {
@@ -1596,7 +1664,7 @@
         if (!prompt) return
         if (prompt.length > 1200) {
           prompt = prompt.slice(0, 1200)
-          this.showNotify('Message exceeds 1200 chars, truncated')
+          this.showNotify('Message exceeds 1200 chars, truncated', 'error')
         }
         this.cmdOpen = false
         this.cmdIdx = -1
@@ -1604,7 +1672,7 @@
           this.inputText = ''
           this.$nextTick(() => { self.autosize() })
           this.newSession()
-          this.showNotify('New session started')
+          this.showNotify('New session started','success')
           return
         }
         if (/^\/clear\s*$/.test(prompt)) {
@@ -1953,11 +2021,11 @@
         }
         this.fetchFend('stop', { runId: runId, session: sessionId }, 15000).then((data) => {
           if (!data.ok) {
-            self.showNotify('stop failed: ' + (data.error || (data.code ? 'code ' + data.code : 'unknown')))
+            self.showNotify('stop failed: ' + (data.error || (data.code ? 'code ' + data.code : 'unknown')), 'error')
           }
           self.busy = false
         }).catch((e) => {
-          self.showNotify('stop error: ' + e.message)
+          self.showNotify('stop error: ' + e.message, 'error')
           self.busy = false
         })
       },
@@ -1999,11 +2067,11 @@
             self.qSel = []
             self.qCustom = []
           } else {
-            self.showNotify('Reply failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Reply failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.qSubmitting = false
-          self.showNotify('Reply failed: ' + e.message)
+          self.showNotify('Reply failed: ' + e.message, 'error')
         })
       },
       qReject() {
@@ -2019,11 +2087,11 @@
             self.qSel = []
             self.qCustom = []
           } else {
-            self.showNotify('Reject failed: ' + ((data && data.error) || 'unknown'))
+            self.showNotify('Reject failed: ' + ((data && data.error) || 'unknown'), 'error')
           }
         }).catch((e) => {
           self.qSubmitting = false
-          self.showNotify('Reject failed: ' + e.message)
+          self.showNotify('Reject failed: ' + e.message, 'error')
         })
       },
       clearChat() {
@@ -2044,7 +2112,7 @@
       },
       compactChat() {
         if (this.compacting || this.busy) return
-        if (!this.sessionId) { this.showNotify('No active session to compact'); return }
+        if (!this.sessionId) { this.showNotify('No active session to compact', 'error'); return }
         const sid = this.sessionId
         const self = this
         const compactId = 'compact-' + Date.now()
@@ -2293,7 +2361,16 @@
     },
     mounted() {
       const self = this
-      document.addEventListener('click', () => { self.dropdown = '' })
+      document.addEventListener('click', (e) => {
+        // 检查点击是否在下拉菜单外部
+        const dropdownEl = document.getElementById('modelDropdown')
+        if (dropdownEl && !dropdownEl.contains(e.target) && self.dropdown === 'model') {
+          self.dropdown = ''
+          self.$nextTick(() => { self.$refs.inputEl?.focus() })
+        } else {
+          self.dropdown = ''
+        }
+      })
 
       const mainEs = new EventSource('/sse/elecV2P/pi-main')
       self.sseMain = mainEs
