@@ -80,6 +80,19 @@
       border-color: var(--ok); background: rgba(63,185,80,.18); color: #56d364;
     }
     .header .compact-btn.busy { border-color: var(--ac); background: rgba(88,166,255,.10); color: var(--ac); }
+    .header .theme-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 4px 10px; border-radius: 7px; font-size: 12px;
+      border: 1px solid var(--bd); background: var(--bk3);
+      color: var(--fc); cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: all .15s;
+    }
+    .header .theme-btn:hover {
+      border-color: var(--fc3); background: var(--bk2); color: var(--fc);
+    }
+    .header .theme-btn .theme-icon {
+      font-size: 14px;
+    }
     .header .load { position: absolute; left: 50%; transform: translateX(-50%); font-size: 22px; color: var(--ac); letter-spacing: 4px; animation: loadPulse 1.2s ease-in-out infinite; }
     @keyframes loadPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
     #modelDropdown { left: auto; right: 0; }
@@ -217,6 +230,47 @@
       opacity: 0; pointer-events: none; transition: opacity .25s;
     }
     .overlay.show { opacity: 1; pointer-events: auto; }
+    .theme-overlay {
+      position: fixed; inset: 0; z-index: 9998;
+      background: rgba(13,17,23,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 16px; padding: 20px;
+    }
+    .theme-panel {
+      width: min(480px, 94vw); max-height: 86vh; overflow-y: auto;
+      background: var(--bk2); border: 1px solid var(--bd); border-radius: 12px;
+      padding: 22px; display: flex; flex-direction: column; gap: 16px;
+      position: relative;
+    }
+    .theme-close {
+      position: absolute; top: 10px; right: 12px;
+      background: none; border: none; color: var(--fc2); cursor: pointer;
+      font-size: 20px; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    }
+    .theme-close:hover { background: var(--bk3); color: var(--fc); }
+    .theme-title { font-size: 17px; color: var(--fc); font-weight: bold; }
+    .theme-sub { font-size: 12px; color: var(--fc2); margin-bottom: 8px; }
+    .theme-list {
+      overflow-y: auto; flex: 1; min-height: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .theme-item {
+      padding: 12px 16px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--bd); background: var(--bk3);
+      transition: all .15s;
+    }
+    .theme-item:hover { border-color: var(--fc3); background: var(--bk2); }
+    .theme-item.active { border-color: var(--ac); background: rgba(88,166,255,.08); }
+    .theme-name { font-size: 14px; color: var(--fc); font-weight: bold; margin-bottom: 4px; }
+    .theme-desc { font-size: 12px; color: var(--fc2); }
+    .theme-section {
+      font-size: 11px; color: var(--fc3); text-transform: uppercase; letter-spacing: 1px;
+      margin: 16px 0 8px; padding: 0 8px;
+    }
+    .theme-foot {
+      padding: 12px 16px; border-top: 1px solid var(--bd);
+      font-size: 11px; color: var(--fc3); text-align: center;
+    }
     .session-panel {
       position: fixed; left: -320px; top: 0; bottom: 0; width: 300px;
       background: var(--bk2); border-right: 1px solid var(--bd);
@@ -593,6 +647,32 @@
 
   <div class="overlay" :class="{show: sessionPanelOpen}" @click="sessionPanelOpen=false"></div>
 
+  <div class="theme-overlay" v-if="themeSelectorOpen">
+    <div class="theme-panel">
+      <button class="theme-close" @click="themeSelectorOpen=false" title="Close">×</button>
+      <div class="theme-title">选择主题</div>
+      <div class="theme-sub">选择 elecV2P 的主题来同步应用到 Pi 界面</div>
+      <div class="theme-list">
+        <div class="theme-item" v-if="!currentTheme" @click="selectTheme(null)">
+          <div class="theme-name">默认主题</div>
+          <div class="theme-desc">Pi 的原始深色主题</div>
+        </div>
+        <div v-if="elecV2PTheme && elecV2PTheme.simple" class="theme-item" @click="selectTheme(elecV2PTheme.simple)">
+          <div class="theme-name">当前 elecV2P 主题</div>
+          <div class="theme-desc">同步 elecV2P 当前使用的主题</div>
+        </div>
+        <div v-if="elecV2PTheme && elecV2PTheme.list" class="theme-section">预设主题</div>
+        <div v-for="(theme, idx) in elecV2PTheme.list" :key="idx" class="theme-item" @click="selectTheme(theme)">
+          <div class="theme-name">{{ theme.name }}</div>
+          <div class="theme-desc">主色调: {{ theme.mainbk || '未设置' }} · 文字色: {{ theme.maincl || '未设置' }}</div>
+        </div>
+      </div>
+      <div class="theme-foot">
+        <div class="theme-info">主题会立即应用到 Pi 界面</div>
+      </div>
+    </div>
+  </div>
+
   <div class="session-panel" :class="{open: sessionPanelOpen}">
     <div class="session-panel-header">
       <span>Session History</span>
@@ -667,6 +747,9 @@
         <div class="d-foot" v-if="models.length">{{ models.length }} 个可用模型</div>
       </div>
     </span>
+    <button class="theme-btn" @click.stop="showThemeSelector" :title="'Sync with elecV2P theme · current: ' + (currentTheme ? currentTheme.name || 'custom' : 'default')">
+      <span class="theme-icon">🎨</span>
+    </button>
     <div class="spacer"></div>
     <span class="ctx" v-if="ctxLimit" :title="ctxUsed + ' / ' + ctxLimit + ' tokens'">
       <span class="ctx-bar" :class="{ warn: ctxPct >= 80 && ctxPct < 95, danger: ctxPct >= 95 }"><i :style="ctxStyle"></i></span>
@@ -782,6 +865,7 @@
         scrollPending: false,
         currentProvider: '', provSeq: 0,
         omniCurrent: false, omniStatus: 'checking…', omniRunning: false,
+        elecV2PTheme: null, currentTheme: null, themeSelectorOpen: false,
         omniOverlay: false, omniErr: '', omniProgress: 'Starting OmniRoute...', omniLog: [], omniCmd: '', omniBusy: false, omniEs: null, omniPendingModel: '',
         customOpen: false, customBusy: false, customEditing: false, customFetchBusy: false,
         customForm: { name: '', baseUrl: '', apiKey: '', api: 'openai-completions', models: '' },
@@ -964,9 +1048,38 @@
         this.dropdown = this.dropdown === which ? '' : which
         if (this.dropdown === 'model') { 
           this.modelNavIdx = 0 
+          // 打开模型列表时，自动滚动到当前使用的模型
+          this.$nextTick(() => {
+            this.scrollToCurrentModel()
+          })
         } else if (wasOpen) {
           // 如果关闭了下拉菜单，返回焦点到输入框
           this.$nextTick(() => { this.$refs.inputEl?.focus() })
+        }
+      },
+      showThemeSelector() {
+        this.themeSelectorOpen = true
+        // 关闭其他下拉菜单
+        this.dropdown = ''
+      },
+      selectTheme(theme) {
+        this.applyTheme(theme)
+        this.themeSelectorOpen = false
+      },
+      scrollToCurrentModel() {
+        const dropdownEl = document.getElementById('modelDropdown')
+        if (!dropdownEl) return
+        
+        const listEl = dropdownEl.querySelector('.d-list')
+        if (!listEl) return
+        
+        // 找到当前使用的模型在列表中的位置
+        const currentIndex = this.filteredModels.findIndex(model => model === this.currentModel)
+        if (currentIndex >= 0) {
+          const item = listEl.children[currentIndex]
+          if (item && item.scrollIntoView) {
+            item.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }
         }
       },
       viewAll() {
@@ -1255,6 +1368,110 @@
           self.currentProvider = self.omniCurrent ? 'omniroute' : (cur ? cur.name : '')
           return data || {}
         }).catch(() => {})
+      },
+      loadElecV2PTheme() {
+        const self = this
+        // 主题数据由 /data?type=overview 返回（含 theme 字段）
+        return fetch('/data?type=overview', {
+          method: 'get',
+          headers: {'Content-Type': 'application/json'}
+        }).then((r) => { return r.json() }).then((data) => {
+          if (data && data.theme) {
+            self.elecV2PTheme = data.theme
+            // 应用当前主题
+            self.applyTheme(self.elecV2PTheme.simple || {})
+          }
+        }).catch(() => {})
+      },
+      applyTheme(theme) {
+        // Pi 界面实际使用的变量是 --bk/--bk2/--bk3/--fc/--fc2/--fc3/--ac/--bd 等，
+        // 需要把 elecV2P 主题（mainbk/maincl）映射到这组变量上才会生效。
+        const styleId = 'pi-theme-style'
+        const existing = document.getElementById(styleId)
+        if (existing) existing.remove()
+
+        const root = document.documentElement
+        // 恢复默认主题
+        if (!theme) {
+          ;['--bk','--bk2','--bk3','--fc','--fc2','--fc3','--ac','--bd','--code-bk'].forEach(k => root.style.removeProperty(k))
+          this.currentTheme = null
+          return
+        }
+
+        let vars = ''
+        let rules = ''
+        const rgb = theme.mainbk ? this.hexToRgb(theme.mainbk) : null
+        if (rgb) {
+          // 能够解析出颜色时：标准化为 6 位实色（避免 #RGBA 简写的透明黑导致界面全黑），
+          // 并依据背景亮度推导文字/边框/辅助背景色。
+          const base = this.rgbToHex(rgb)
+          const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000
+          const light = brightness > 128
+          const fg  = light ? '#0d1117' : '#e6edf3'
+          const fg2 = light ? 'rgba(13,17,23,.55)' : 'rgba(230,237,243,.55)'
+          const fg3 = light ? 'rgba(13,17,23,.35)' : 'rgba(230,237,243,.35)'
+          const bd  = light ? 'rgba(13,17,23,.22)' : 'rgba(230,237,243,.18)'
+          vars += `--bk: ${base};--code-bk: ${base};--bk2: ${this.shade(base, light ? -0.07 : 0.06)};--bk3: ${this.shade(base, light ? -0.11 : 0.10)};`
+          vars += `--fc: ${fg};--fc2: ${fg2};--fc3: ${fg3};--bd: ${bd};`
+        } else if (theme.mainbk) {
+          // 颜色无法解析（如 url(...) 背景图），保留原值，辅助色直接用主背景
+          vars += `--bk: ${theme.mainbk};--code-bk: ${theme.mainbk};--bk2: ${theme.mainbk};--bk3: ${theme.mainbk};--fc: #e6edf3;--fc2: rgba(230,237,243,.55);--fc3: rgba(230,237,243,.35);--bd: rgba(230,237,243,.18);`
+        }
+        if (theme.maincl) {
+          vars += `--ac: ${theme.maincl};`
+        }
+        // appbk：应用背景（背景图片或纯色），作用于页面 body，图片铺满并固定
+        if (theme.appbk) {
+          let bg = theme.appbk
+          if (/^https?:/.test(bg)) bg = `url(${bg})`
+          rules += `body { background: ${bg} !important; background-size: cover; background-position: center; background-attachment: fixed; }`
+        }
+        // elecV2P 主题附带的自定义样式（类名可能不匹配 Pi，但仍保留以免遗漏关键变量）
+        if (theme.style) rules += theme.style
+
+        let allCss = ''
+        if (vars) allCss += `:root {\n  ${vars}\n}`
+        if (rules) allCss += `\n${rules}`
+        if (allCss) {
+          const styleEl = document.createElement('style')
+          styleEl.id = styleId
+          styleEl.textContent = allCss
+          document.head.appendChild(styleEl)
+        }
+
+        // 保存当前主题设置
+        this.currentTheme = theme
+      },
+      shade(hex, amount) {
+        // amount>0 向白色混合（变亮），amount<0 向黑色混合（变暗）
+        const rgb = this.hexToRgb(hex)
+        if (!rgb) return hex
+        const mix = (c) => {
+          const v = amount >= 0 ? c + (255 - c) * amount : c * (1 + amount)
+          return Math.max(0, Math.min(255, Math.round(v)))
+        }
+        const r = mix(rgb.r), g = mix(rgb.g), b = mix(rgb.b)
+        return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
+      },
+      hexToRgb(hex) {
+        if (!hex || typeof hex !== 'string' || hex[0] !== '#') return null
+        let h = hex.trim()
+        // 展开简写：#RGB -> #RRGGBB， #RGBA -> #RRGGBB
+        if (/^#[a-f\d]{3}$/i.test(h)) {
+          h = '#' + h.slice(1).split('').map(c => c + c).join('')
+        } else if (/^#[a-f\d]{4}$/i.test(h)) {
+          h = '#' + h.slice(1, 4).split('').map(c => c + c).join('')
+        }
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h)
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : null
+      },
+      rgbToHex(rgb) {
+        if (!rgb) return null
+        return '#' + [rgb.r, rgb.g, rgb.b].map(v => v.toString(16).padStart(2, '0')).join('')
       },
       showProviderPicker() {
         const self = this
@@ -2327,6 +2544,8 @@
               self.useOmniRoute()
             }
           })
+          // 加载 elecV2P 主题
+          self.loadElecV2PTheme()
         })
       },
       refreshCtx() {
@@ -2369,6 +2588,14 @@
           self.$nextTick(() => { self.$refs.inputEl?.focus() })
         } else {
           self.dropdown = ''
+        }
+        // 检查点击是否在主题选择器外部
+        if (self.themeSelectorOpen) {
+          const themeOverlay = e.target.closest('.theme-overlay')
+          const themePanel = e.target.closest('.theme-panel')
+          if (!themeOverlay || !themePanel) {
+            self.themeSelectorOpen = false
+          }
         }
       })
 
