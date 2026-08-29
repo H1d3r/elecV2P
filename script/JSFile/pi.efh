@@ -485,7 +485,7 @@
           <div class="pc-name">{{ p.name }}</div>
           <div class="pc-desc">{{ p.baseUrl }}</div>
         </div>
-        <input class="pc-key" v-model="providerKeys[p.name]" :placeholder="p.hasKey ? 'key saved · re-enter to change' : 'API key'" type="password">
+        <input class="pc-key" v-model="providerKeys[p.name]" :placeholder="p.keySet ? 'key saved · re-enter to change' : 'API key'" type="password">
         <button class="pc-btn" :class="{used: p.current}" :disabled="providerBusy" @click="useProvider(p.name)">{{ p.current ? 'current' : 'use' }}</button>
         <button class="pc-del" :disabled="providerBusy || p.current" :title="p.current ? 'Cannot delete the current provider' : 'Delete provider'" @click="deleteProvider(p.name)">×</button>
       </div>
@@ -963,6 +963,13 @@
         this.dropdown = ''
         this.refreshCtx()
         this.loadProviders().catch(() => {})
+        if (pidx > 0 && model.slice(0, pidx) !== 'omniroute') {
+          const sel = (this.providerList || []).find((x) => x.name === model.slice(0, pidx))
+          if (sel && !sel.keySet) {
+            this.showNotify('Please enter the API key for ' + sel.name + ' first')
+            this.showProviderPicker()
+          }
+        }
       },
       switchDefaultModel(m) {
         this.currentModel = (m || '').replace(/\r/g, '')
@@ -1072,11 +1079,29 @@
         this.providerOverlay = true
         this.loadProviders().catch(() => {})
       },
+      checkProviderReady() {
+        const cm = this.currentModel.replace(/\r/g, '')
+        const sep = cm.indexOf('/')
+        let name = sep > 0 ? cm.slice(0, sep) : this.currentProvider
+        if (!name) {
+          const cur = (this.providerList || []).find((p) => p.current)
+          if (cur) name = cur.name
+        }
+        if (this.omniCurrent || name === 'omniroute') return true
+        const p = (this.providerList || []).find((x) => x.name === name)
+        if (!name || !p || !p.keySet) {
+          if (p) this.showNotify('Please enter the API key for ' + name + ' first')
+          else this.showNotify('Please choose a model provider first')
+          this.showProviderPicker()
+          return false
+        }
+        return true
+      },
       useProvider(name) {
         const self = this
         const p = this.providerList.find((x) => x.name === name) || {}
         const key = (this.providerKeys[name] || '').trim()
-        if (!key && !p.hasKey) { this.showNotify('Please enter an API key for ' + name); return }
+        if (!key && !p.keySet) { this.showNotify('Please enter an API key for ' + name); return }
         this.providerBusy = true
         const fendName = (p.custom || p.overridden) ? 'provider_custom_save' : 'provider_save'
         const payload = { name: name }
@@ -1272,7 +1297,8 @@
         if (!name) { this.showNotify('Please enter a provider name'); return }
         if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) { this.showNotify('Name must be letters/numbers/hyphens only'); return }
         if (!baseUrl) { this.showNotify('Please enter a base URL'); return }
-        if (!apiKey && !this.customEditing) { this.showNotify('Please enter an API key'); return }
+        const existing = (this.providerList || []).find((x) => x.name === name)
+        if (!apiKey && !(existing && existing.keySet)) { this.showNotify('Please enter an API key'); return }
         this.customBusy = true
         this.fetchFend('provider_custom_save', {
           name: name, baseUrl: baseUrl, apiKey: apiKey, api: this.customForm.api,
@@ -1451,6 +1477,7 @@
           this.clearChat()
           return
         }
+        if (!this.checkProviderReady()) return
         this.saveHistory(prompt)
         this.inputText = ''
         this.$nextTick(() => { self.autosize() })
@@ -2388,14 +2415,14 @@ $fend('providers', (data) => {
     const existing = (mj.providers || {})[p.name] || {}
     const hasKey = !!(existing.apiKey && String(existing.apiKey) !== '' && !/^\$/.test(String(existing.apiKey)))
     const presetModels = (existing.models && existing.models.length) ? existing.models : p.models
-    list.push({ name: p.name, baseUrl: existing.baseUrl || p.baseUrl, api: existing.api || p.api, hasKey: hasKey, current: eff === p.name, custom: false, overridden: !!(existing.models && existing.models.length), models: presetModels.map((m) => (m && m.id) || '').filter(Boolean) })
+    list.push({ name: p.name, baseUrl: existing.baseUrl || p.baseUrl, api: existing.api || p.api, hasKey: hasKey, keySet: !!existing.apiKey, current: eff === p.name, custom: false, overridden: !!(existing.models && existing.models.length), models: presetModels.map((m) => (m && m.id) || '').filter(Boolean) })
   }
   for (const key in (mj.providers || {})) {
     if (key === 'omniroute') continue
     if (PROVIDER_PRESETS.find((p) => p.name === key)) continue
     const existing = mj.providers[key] || {}
     const hasKey = !!(existing.apiKey && String(existing.apiKey) !== '' && !/^\$/.test(String(existing.apiKey)))
-    list.push({ name: key, baseUrl: existing.baseUrl || '', api: existing.api || 'openai-completions', hasKey: hasKey, current: eff === key, custom: true, models: (existing.models || []).map((m) => (m && m.id) || '').filter(Boolean) })
+    list.push({ name: key, baseUrl: existing.baseUrl || '', api: existing.api || 'openai-completions', hasKey: hasKey, keySet: !!existing.apiKey, current: eff === key, custom: true, models: (existing.models || []).map((m) => (m && m.id) || '').filter(Boolean) })
   }
   let omniCurrent = eff === 'omniroute'
   let omniStatus = 'disabled'
@@ -2518,6 +2545,7 @@ $fend('provider_custom_save', (data) => {
     const st = readSettingsJson()
     const prev = mj.providers[name] || {}
     const finalKey = apiKey || prev.apiKey || null
+    if (!finalKey) return { ok: false, error: 'API key required for ' + name }
     const modelIds = Array.isArray(data.models) ? data.models.map((m) => String(m).trim()).filter(Boolean) : []
     const models = modelIds.map((id) => ({ id: id, name: id, contextWindow: 128000, maxTokens: 16384 }))
     if (!models.length && !(data.models || []).length) {
@@ -3128,6 +3156,11 @@ $fend('start', (data) => {
         } else {
           fail(etxt.split('\n')[0])
         }
+      } else if (switchLeft < MAX_SWITCH) {
+        // 当前切换到的模型成功产出了可用回复 —— 重置自动切换次数，下次失败从 1/10 重新计数
+        switchLeft = MAX_SWITCH
+        retryLeft = MAX_RETRY
+        sendRef('✓ ' + (model || 'model') + ' worked · reset switch budget (' + (MAX_SWITCH - switchLeft) + '/' + MAX_SWITCH + ')', 'info')
       }
       return
     }
