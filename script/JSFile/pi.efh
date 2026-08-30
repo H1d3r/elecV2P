@@ -82,7 +82,7 @@
     .header .compact-btn.busy { border-color: var(--ac); background: rgba(88,166,255,.10); color: var(--ac); }
     .header .theme-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      padding: 4px 10px; border-radius: 7px; font-size: 12px;
+      padding: 4px 16px; margin-left: 18px; border-radius: 7px; font-size: 12px;
       border: 1px solid var(--bd); background: transparent;
       color: var(--fc); cursor: pointer; white-space: nowrap; flex-shrink: 0;
       transition: all .15s;
@@ -91,7 +91,7 @@
       border-color: var(--fc3); background: transparent; color: var(--fc);
     }
     .header .theme-btn .theme-icon {
-      font-size: 14px;
+      font-size: 11px;
     }
     .header .load { position: absolute; left: 50%; transform: translateX(-50%); font-size: 22px; color: var(--ac); letter-spacing: 4px; animation: loadPulse 1.2s ease-in-out infinite; }
     @keyframes loadPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
@@ -2114,16 +2114,28 @@
         let textFlush = null
         let reasonBuf = ''
         let reasonFlush = null
+        let curReason = null // 当前打开的 reasoning 块（HTML ref part）
+        // 收尾当前 reasoning 块：把剩余缓冲写入它，标记关闭，后续内容另起新块
+        const closeReason = () => {
+          if (reasonBuf) {
+            if (curReason) curReason.body = (curReason.body || '') + reasonBuf
+            else {
+              curReason = { t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: reasonBuf, reasonBody: true }
+              el.parts.push(curReason)
+            }
+            reasonBuf = ''
+          }
+          if (curReason) curReason.closed = true
+          curReason = null
+        }
         const flushReasoning = () => {
           if (reasonFlush) { clearTimeout(reasonFlush); reasonFlush = null }
           if (!reasonBuf) return
-          let target = null
-          for (let i = el.parts.length - 1; i >= 0; i--) {
-            const p = el.parts[i]
-            if (p.t === 'ref' && p.cls === 'reasoning' && p.reasonBody) { target = p; break }
+          if (!curReason || curReason.closed) {
+            curReason = { t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: '', reasonBody: true }
+            el.parts.push(curReason)
           }
-          if (target) target.body = (target.body || '') + reasonBuf
-          else el.parts.push({ t: 'ref', c: '✱ reasoning', cls: 'reasoning', body: reasonBuf, reasonBody: true })
+          curReason.body = (curReason.body || '') + reasonBuf
           reasonBuf = ''
           self.scrollReasoningBottom()
         }
@@ -2187,8 +2199,13 @@
                 const found = el.parts.find((p) => p.uid === data.uid)
                 if (found) { found.c = data.content; found.cls = data.cls || '' }
                 else el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '', uid: data.uid })
+              } else if (data.cls === 'reasoning' && data.content.indexOf('✱') === 0) {
+                // 新的 reasoning 块开始：先收尾上一个块，本块内容稍后由 flushReasoning 另起新块
+                closeReason()
               } else {
-                el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '', reasonBody: data.cls === 'reasoning' && data.content.indexOf('✱') === 0 })
+                // reasoning done 行 / 工具 / 信息等显示行：先收尾尚未结束的 reasoning 块，避免内容串块
+                closeReason()
+                el.parts.push({ t: 'ref', c: data.content, cls: data.cls || '' })
               }
             }
             if (data.type === 'reasoning') {
@@ -2764,6 +2781,7 @@
 </script>
 
 <script favend>
+// @grant persist
 const { spawn, exec } = require('child_process')
 const fs = require('fs')
 const path = require('path')
@@ -3771,26 +3789,20 @@ $fend('start', (data) => {
   const runningTools = {}
   const seenTools = {}
   const lastToolOut = {}
-  const reasoningSeen = {} // 每个内容块（contentIndex）的 thinking 状态: undefined | 'start' | 'done'
-  const reasonStart = (ci) => {
-    if (reasoningSeen[ci] !== 'start' && reasoningSeen[ci] !== 'done') {
-      reasoningSeen[ci] = 'start'
+  // reasoning 块开关：同一消息内可能有多次 thinking（contentIndex 可能复用），
+  // 用单一「当前是否打开」标志保证：每块只发一次「✱ reasoning」，
+  // 不会因 ci 复用而漏掉后面的块。收尾时只复位标志，不额外输出「done」行（后台 session 里也不存在该行）。
+  let reasoningOpen = false
+  const reasonBegin = () => {
+    if (!reasoningOpen) {
+      reasoningOpen = true
       sendRef('✱ reasoning', 'reasoning')
     }
   }
-  const reasonDone = (ci) => {
-    if (reasoningSeen[ci] !== 'done') {
-      reasoningSeen[ci] = 'done'
+  const reasonEnd = () => {
+    if (reasoningOpen) {
+      reasoningOpen = false
       sendRef('✓ reasoning done', 'reasoning')
-    }
-  }
-  // 把仍处于 start 态的 reasoning 块一次性全部标成 done（每个块只发一次，避免重复输出）
-  const reasonFlush = () => {
-    for (const k of Object.keys(reasoningSeen)) {
-      if (reasoningSeen[k] === 'start') {
-        reasoningSeen[k] = 'done'
-        sendRef('✓ reasoning done', 'reasoning')
-      }
     }
   }
   const streamTc = {}
@@ -3907,24 +3919,24 @@ $fend('start', (data) => {
       const at = ame.type
       const ci = ame.contentIndex || 0
       if (at === 'text_delta') {
-        reasonFlush()
+        reasonEnd()
         if (ame.delta) send('text', { content: ame.delta })
         return
       }
       if (at === 'thinking_start' || at === 'thinking_delta') {
-        reasonStart(ci)
+        reasonBegin()
         if (at === 'thinking_delta' && ame.delta) send('reasoning', { content: ame.delta })
         return
       }
       if (at === 'thinking_end') {
-        reasonDone(ci)
+        reasonEnd()
         return
       }
       if (at === 'toolcall_start') {
         // 工具调用正在流式生成（名称要到 toolcall_end 才知道）：先亮占位脉冲，消除静默等待感
         // deepseek 类后端可能在工具调用之后才补发 thinking_end：
         // 这里先把仍未结束的 reasoning 块标成 done，保证「✓ reasoning done」行排在工具 ref 之前
-        reasonFlush()
+        reasonEnd()
         const uid = 'tc-' + (++tcUidSeq)
         streamTc[ci] = uid
         send('ref', { content: '◈ generating tool call…', cls: 'tool', uid: uid })
@@ -3957,7 +3969,7 @@ $fend('start', (data) => {
     if (t === 'message_end') {
       const msg = ev.message || {}
       for (const k in streamTc) delete streamTc[k]
-      reasonFlush()
+      reasonEnd()
       if (msg.provider && msg.model) {
         model = msg.provider + '/' + msg.model
         send('init', { content: '> build · ' + model })
