@@ -1,8 +1,10 @@
 <template>
   <div class="evui">
-    <VueDragResize v-for="(ediv, drid) in draglist" :key="drid" className="ediv" dragHandle=".ediv_title--name" :parent="true" :prevent-deactivation="false" :active="ediv.active" :w="ediv.width" :h="ediv.height" :x="ediv.left" :y="ediv.top" :z="ediv.z" :resizable="ediv.resizable" :draggable="ediv.draggable" :handles="['tl','tr','bl','br']" :lock-aspect-ratio="false" @deactivated="ediv.z=1" @activated="ediv.z=2" @resizestop="(...args) => updateVal(args, drid)" @dragstop="(...args) => updateVal(args, drid)">
+    <VueDragResize v-for="(ediv, drid) in displayList" :key="drid" className="ediv" dragHandle=".ediv_title--name" :parent="true" :prevent-deactivation="false" :active="ediv.active" :w="ediv.width" :h="ediv.height" :x="ediv.left" :y="ediv.top" :z="ediv.z" :resizable="ediv.resizable" :draggable="ediv.draggable" :handles="['tl','tr','bl','br']" :lock-aspect-ratio="false" :class="{ 'ediv--minimized': ediv.minimized }" @deactivated="ediv.z=1" @activated="ediv.z=2" @resizestop="(...args) => updateVal(args, drid)" @dragstop="(...args) => updateVal(args, drid)">
       <h3 class="ediv_title" :style="ediv.style.title" @click="ediv.z=2">
         <span class="ediv_title--name" :title="drid">{{ ediv.title }}</span>
+        <span class="ediv_title--minimize" @click="evMinimize(drid)" :title="$t('minimize')"><i class="ediv_btn_icon ediv_btn_icon--min"></i></span>
+        <span class="ediv_title--maximize" @click="evMaximize(drid)" :title="$t('maximize')"><i class="ediv_btn_icon ediv_btn_icon--max"></i></span>
         <span class="ediv_title--close" @click="evRemove(drid)">x</span>
       </h3>
       <div class="ediv_content" :style="ediv.style.content" v-html="ediv.content" @click="evDelegate($event, drid)" @keydown.ctrl.83.prevent.stop="evSave(drid)"></div>
@@ -11,6 +13,28 @@
         <button class="elecBtn ediv_cbbtn" :style="ediv.style.cbbtn" @click="cbsubmit(drid)">{{ ediv.cblabel }}</button>
       </div>
     </VueDragResize>
+    <div v-for="ediv in maximizedList" :key="ediv._id + '_max'" class="ediv ediv--maximized" :style="{ zIndex: ediv.z, backgroundColor: 'var(--main-cl)' }">
+      <h3 class="ediv_title" :style="ediv.style.title">
+        <span class="ediv_title--name" :title="ediv._id">{{ ediv.title }}</span>
+        <span class="ediv_title--minimize" @click="evMinimize(ediv._id)" :title="$t('minimize')"><i class="ediv_btn_icon ediv_btn_icon--min"></i></span>
+        <span class="ediv_title--maximize" @click="evRestoreMaximized(ediv._id)" :title="$t('restore')"><i class="ediv_btn_icon ediv_btn_icon--restore"></i></span>
+        <span class="ediv_title--close" @click="evRemove(ediv._id)">x</span>
+      </h3>
+      <div class="ediv_content" :style="ediv.style.content" v-html="ediv.content" @click="evDelegate($event, ediv._id)" @keydown.ctrl.83.prevent.stop="evSave(ediv._id)"></div>
+      <div v-if="ediv.cbable" class="ediv_btncontainer">
+        <textarea class="elecTable_input ediv_cbdata" :style="ediv.style.cbdata" :placeholder="ediv.cbhint" v-model="ediv.cbdata" @keyup.ctrl.enter="cbsubmit(ediv._id)"></textarea>
+        <button class="elecBtn ediv_cbbtn" :style="ediv.style.cbbtn" @click="cbsubmit(ediv._id)">{{ ediv.cblabel }}</button>
+      </div>
+    </div>
+    <div v-if="hasMinimized" class="evui_dock">
+      <div v-for="ediv in minimizedList" :key="ediv._id" class="evui_dock_item" @click="evRestoreMinimized(ediv._id)" @mouseenter="minimizedHover = ediv._id" @mouseleave="minimizedHover = null">
+        <span v-if="minimizedHover === ediv._id" class="evui_dock_label">{{ ediv.title }}</span>
+        <div class="evui_dock_iconwrap" :style="dockIconStyle">
+          <img class="evui_dock_icon" :src="minLogo(ediv)" :alt="ediv.title" :style="dockIconStyle" />
+          <span class="evui_dock_close" @click.stop="evRemove(ediv._id)" title="x"><svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M6.4 5L5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6z"/></svg></span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -46,7 +70,52 @@ export default {
       },
       script: '',
       draglist: { },
+      minimizedHover: null,
     }
+  },
+  computed: {
+    hasMinimized() {
+      return Object.values(this.draglist).some(e => e.minimized)
+    },
+    minimizedCount() {
+      return Object.values(this.draglist).filter(e => e.minimized).length
+    },
+    displayList() {
+      const list = {}
+      for (const [id, item] of Object.entries(this.draglist)) {
+        if (!item.maximized) {
+          list[id] = item
+        }
+      }
+      return list
+    },
+    maximizedList() {
+      const list = []
+      for (const [id, item] of Object.entries(this.draglist)) {
+        if (item.maximized && !item.minimized) {
+          list.push({ ...item, _id: id })
+        }
+      }
+      return list
+    },
+    minimizedList() {
+      const list = []
+      for (const [id, item] of Object.entries(this.draglist)) {
+        if (item.minimized) {
+          list.push({ ...item, _id: id })
+        }
+      }
+      return list
+    },
+    dockIconStyle() {
+      const n = this.minimizedCount
+      const gap = 20
+      const pad = 36
+      const maxW = Math.min(window.innerWidth * 0.6, 720)
+      const avail = maxW - pad - gap * (n - 1)
+      const size = Math.max(40, Math.min(44, Math.floor(avail / n)))
+      return { width: size + 'px', height: size + 'px' }
+    },
   },
   created() {
     vue2Proto.evui = (evui)=>this.neweu({ ...evui, type: 'local' })
@@ -93,11 +162,13 @@ export default {
   },
   watch: {
     script(code){
-      // 插入代码
       this.$uApi.injectJs(code)
     }
   },
   methods: {
+    minLogo(item) {
+      return this.$uApi.hashToLogo(item._id, item.title, 3)
+    },
     updateVal({...rect}, drid) {
       let newval = {
         left: rect[0],
@@ -120,7 +191,46 @@ export default {
       if (evui.cbdata) evui.cbdata = this.$sString(evui.cbdata)
       if (this.$sType(evui.style) !== 'object') evui.style = { content: evui.style }
       if (evui.script) this.script = evui.script
+      evui.minimized = false
+      evui.maximized = false
       this.draglist[id] = evui
+    },
+    evMaximize(id) {
+      const item = this.draglist[id]
+      if (!item) return
+      item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
+      item.top = 0
+      item.left = 0
+      item.width = document.body.clientWidth
+      item.height = document.body.clientHeight
+      item.resizable = false
+      item.draggable = false
+      item.maximized = true
+    },
+    evRestoreMaximized(id) {
+      const item = this.draglist[id]
+      if (!item || !item.prev) return
+      Object.assign(item, item.prev, { maximized: false })
+      delete item.prev
+    },
+    evMinimize(id) {
+      const item = this.draglist[id]
+      if (!item) return
+      if (!item.prev) {
+        item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
+      }
+      item.minimized = true
+    },
+    evRestoreMinimized(id) {
+      const item = this.draglist[id]
+      if (!item) return
+      item.minimized = false
+      if (item.prev && !item.maximized) {
+        Object.assign(item, item.prev)
+        delete item.prev
+      }
+      item.active = true
+      item.z = 2
     },
     evRemove(id){
       if (!id) {
