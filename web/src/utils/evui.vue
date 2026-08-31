@@ -189,10 +189,10 @@ export default {
       delete item.prev
     },
     persistMinimized() {
-      const store = {}
+      const data = {}
       for (const [id, item] of Object.entries(this.draglist)) {
         if (!item.minimized) continue
-        store[id] = {
+        data[id] = {
           title: item.title,
           top: item.top,
           left: item.left,
@@ -210,25 +210,36 @@ export default {
           cbhint: item.cbhint,
         }
       }
-      try {
-        localStorage.setItem('evui_minimized', JSON.stringify(store))
-      } catch (e) {
-        this.$message.error('evui 最小化窗口保存失败', e && e.message)
-      }
+      const hasData = Object.keys(data).length > 0
+      const req = hasData
+        ? { type: 'save', data: { key: '.evui_minimized', value: { type: 'object', value: data } } }
+        : { type: 'delete', data: '.evui_minimized' }
+      this.$axios.put('/store', req).then(res=>{
+        if (!hasData || res.data.rescode === 0) {
+          !hasData && this.$message.success('.evui_minimized 已从 store 常量删除')
+        } else {
+          this.$message.error('evui 最小化窗口保存到 store 常量失败', res.data.message)
+        }
+      }).catch(e=>{
+        this.$message.error('evui 最小化窗口保存到 store 常量失败', e && e.message)
+      })
     },
     restoreMinimized() {
-      let store
-      try {
-        store = JSON.parse(localStorage.getItem('evui_minimized') || '{}')
-      } catch (e) {
-        store = {}
-      }
-      for (const id of Object.keys(store)) {
-        if (this.draglist[id]) continue
-        this.neweu({ id, ...store[id] })
-        this.draglist[id].minimized = true
-        this.draglist[id].active = false
-      }
+      this.$axios.get('/store/.evui_minimized').then(res=>{
+        let store
+        try {
+          const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+          store = parsed && parsed.value || {}
+        } catch (e) {
+          store = {}
+        }
+        for (const id of Object.keys(store)) {
+          if (this.draglist[id]) continue
+          this.neweu({ id, ...store[id] })
+          this.draglist[id].minimized = true
+          this.draglist[id].active = false
+        }
+      }).catch(()=>{})
     },
     evMinimize(id) {
       const item = this.draglist[id]
