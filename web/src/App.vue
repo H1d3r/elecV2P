@@ -26,6 +26,7 @@
     <keep-alive>
       <component :is="currentpanel" @menunav="menunav" @theme="themeApply" />
     </keep-alive>
+    <div class="pi-efh-btn" v-if="piEfhShow" @click="openPiEfh" @contextmenu.prevent="hidePiEfh" title="点击打开 Pi-Agent 界面，右键关闭"><svg class="pi-efh-icon" viewBox="0 0 470 470" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M0 0H352.07V234.71H234.71V352.07H117.36V469.43H0V0ZM117.36 117.36V234.71H234.71V117.36H117.36Z"></path><path fill="currentColor" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"></path></svg></div>
   </section>
 </template>
 
@@ -58,6 +59,7 @@ export default {
       sidermobile: true,
       currentpanel: 'overview',
       islangzh: langset.locale.startsWith('zh'),
+      piEfhShow: true,
       menulist: {
         overview: Object.create(null),
         task: Object.create(null),
@@ -91,6 +93,10 @@ export default {
     }
     this.menulist.setting.show = true
     this.menulist.donation.show = true
+    // load piEfh button visibility from store
+    // Only hide when explicitly set to false, otherwise show
+    const storedPi = this.$uApi.store.get('piEfhShow')
+    if (storedPi === 'false' || storedPi === false) this.piEfhShow = false
     let theme_cache = this.$sJson(this.$uApi.store.get('theme'))
     if (theme_cache) {
       this.themeApply(theme_cache)
@@ -267,6 +273,16 @@ export default {
       this.$message.error('LOGO 图标加载失败，自动生成替换图标')
       this.logo_src = this.$uApi.hashToLogo(this.$uApi.store.get('userid'), this.logo_name, 4)
     },
+    openPiEfh(){
+      this.$uApi.open('/run?target=https://raw.ev2.workers.dev/elecV2/elecV2P/master/script/JSFile/pi.efh')
+    },
+    hidePiEfh(){
+      if (confirm('确定隐藏 Pi-Agent 入口按钮吗？\n\n提示：清除浏览器 localStorage 中的 piEfhShow 后刷新页面即可恢复')) {
+        this.piEfhShow = false
+        this.$uApi.store.set('piEfhShow', false)
+        this.$message.success('Pi-Agent 入口按钮已隐藏（清除 localStorage 中 piEfhShow 可恢复）')
+      }
+    },
   }
 };
 </script>
@@ -442,5 +458,35 @@ export default {
 }
 
 }
-</style>
+.pi-efh-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background: var(--main-bk);
+  color: var(--main-cl);
+  border: 1px solid var(--tras-bk);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity .2s, transform .2s;
+  z-index: 10;
+  user-select: none;
+}
 
+.pi-efh-icon {
+  width: 25px;
+  height: 25px;
+}
+
+.pi-efh-btn:hover {
+  opacity: 1;
+  transform: scale(1.05);
+}
+</style>
