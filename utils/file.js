@@ -736,7 +736,7 @@ const store = {
     return false
   },
   all() {
-    return fs.readdirSync(fpath.store)
+    return fs.readdirSync(fpath.store).filter(key => !/^[._]/.test(key))
   },
   backup(targetfile = ''){
     const zip = new Zip();
@@ -752,17 +752,19 @@ const store = {
   },
 }
 
-let estartinfo = store.get('elecV2PStartInfo');
-if (estartinfo && sType(estartinfo) === 'array') {
-  if (estartinfo.length >= 99) {
-    clog.info('elecV2P start for', estartinfo.length, 'times, reset to 1');
-    estartinfo = [];
+setImmediate(()=>{
+  let estartinfo = store.get('elecV2PStartInfo');
+  if (estartinfo && sType(estartinfo) === 'array') {
+    if (estartinfo.length >= 99) {
+      clog.info('elecV2P start for', estartinfo.length, 'times, reset to 1');
+      estartinfo = [];
+    }
+    estartinfo.push(now(null, true, 0));
+  } else {
+    estartinfo = [now(null, true, 0)];
   }
-  estartinfo.push(now(null, true, 0));
-} else {
-  estartinfo = [now(null, true, 0)];
-}
-store.put(estartinfo, 'elecV2PStartInfo', { note: 'Every time of elecV2P start' });
-clog.info('elecV2P start', estartinfo.length, 'times');
+  store.put(estartinfo, 'elecV2PStartInfo', { note: 'Every time of elecV2P start' });
+  clog.info('elecV2P start', estartinfo.length, 'times');
+})
 
 module.exports = { list, Jsfile, store, file }
