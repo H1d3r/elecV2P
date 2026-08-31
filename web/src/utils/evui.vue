@@ -135,6 +135,7 @@ export default {
         }
       })
     }
+    this.restoreMinimized()
   },
   watch: {
     script(code){
@@ -185,6 +186,48 @@ export default {
       Object.assign(item, item.prev, { maximized: false })
       delete item.prev
     },
+    persistMinimized() {
+      const store = {}
+      for (const [id, item] of Object.entries(this.draglist)) {
+        if (!item.minimized) continue
+        store[id] = {
+          title: item.title,
+          top: item.top,
+          left: item.left,
+          width: item.width,
+          height: item.height,
+          z: item.z,
+          type: item.type,
+          content: item.content,
+          style: item.style,
+          resizable: item.resizable,
+          draggable: item.draggable,
+          cbable: item.cbable,
+          cbdata: item.cbdata,
+          cblabel: item.cblabel,
+          cbhint: item.cbhint,
+        }
+      }
+      try {
+        localStorage.setItem('evui_minimized', JSON.stringify(store))
+      } catch (e) {
+        this.$message.error('evui 最小化窗口保存失败', e && e.message)
+      }
+    },
+    restoreMinimized() {
+      let store
+      try {
+        store = JSON.parse(localStorage.getItem('evui_minimized') || '{}')
+      } catch (e) {
+        store = {}
+      }
+      for (const id of Object.keys(store)) {
+        if (this.draglist[id]) continue
+        this.neweu({ id, ...store[id] })
+        this.draglist[id].minimized = true
+        this.draglist[id].active = false
+      }
+    },
     evMinimize(id) {
       const item = this.draglist[id]
       if (!item) return
@@ -192,6 +235,7 @@ export default {
         item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
       }
       item.minimized = true
+      this.persistMinimized()
     },
     evRestoreMinimized(id) {
       const item = this.draglist[id]
@@ -203,6 +247,7 @@ export default {
       }
       item.active = true
       item.z = 2
+      this.persistMinimized()
     },
     evRemove(id){
       if (!id) {
@@ -210,10 +255,12 @@ export default {
         return
       }
       if (this.draglist[id]) {
+        const wasMinimized = this.draglist[id].minimized
         if (this.draglist[id].type !== 'local' && this.$wsrecv && this.$wsrecv.connected) {
           this.$wsrecv.send(id, 'close')
         }
         delete this.draglist[id]
+        if (wasMinimized) this.persistMinimized()
       }
     },
     cbsubmit(id){
