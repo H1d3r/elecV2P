@@ -159,6 +159,7 @@ export default {
     },
     neweu(evui = {}){
       let id = evui.id || this.$uStr.euid()
+      const reqMaximized = !!evui.maximized
       evui = { ...this.init, ...evui }
       evui.top = evui.top || (document.body.clientHeight - Number(evui.height || 460))/2
       evui.left = evui.left || (document.body.clientWidth - Number(evui.width || 800))/2
@@ -171,6 +172,7 @@ export default {
       evui.minimized = false
       evui.maximized = false
       this.draglist[id] = evui
+      if (reqMaximized) this.evMaximize(id)
     },
     evMaximize(id) {
       const item = this.draglist[id]

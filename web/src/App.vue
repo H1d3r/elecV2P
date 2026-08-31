@@ -274,7 +274,18 @@ export default {
       this.logo_src = this.$uApi.hashToLogo(this.$uApi.store.get('userid'), this.logo_name, 4)
     },
     openPiEfh(){
-      this.$uApi.open('/run?target=https://raw.ev2.workers.dev/elecV2/elecV2P/master/script/JSFile/pi.efh')
+      this.$evui({
+        id: 'eapp_efh_pi',
+        title: 'Pi-Agent',
+        width: 900,
+        height: 600,
+        resizable: true,
+        maximized: true,
+        style: {
+          content: 'padding: 0;'
+        },
+        content: `<iframe src="run/?target=${ encodeURIComponent('https://raw.ev2.workers.dev/elecV2/elecV2P/master/script/JSFile/pi.efh') }" style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;"></iframe>`
+      })
     },
     hidePiEfh(){
       if (confirm('确定隐藏 Pi-Agent 入口按钮吗？\n\n提示：清除浏览器 localStorage 中的 piEfhShow 后刷新页面即可恢复')) {
