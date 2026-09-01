@@ -1006,13 +1006,10 @@ noscript {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-right: 2px;
   cursor: pointer;
   opacity: 0.5;
   transition: opacity .15s, background .15s;
-}
-
-.ediv_title--minimize {
-  margin-right: 2px;
 }
 
 .ediv_title--minimize:hover,
@@ -1058,6 +1055,7 @@ noscript {
   float: right;
   width: 36px;
   height: 36px;
+  margin-left: 4px;
   display: flex;
   align-items: center;
   justify-content: center;

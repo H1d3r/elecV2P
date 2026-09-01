@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="evui">
     <VueDragResize v-for="(ediv, drid) in displayList" :key="drid" className="ediv" dragHandle=".ediv_title--name" :parent="true" :prevent-deactivation="false" :active="ediv.active" :w="ediv.width" :h="ediv.height" :x="ediv.left" :y="ediv.top" :z="ediv.z" :resizable="ediv.resizable" :draggable="ediv.draggable" :handles="['tl','tr','bl','br']" :lock-aspect-ratio="false" :class="{ 'ediv--minimized': ediv.minimized, 'ediv--maximized': ediv.maximized }" @deactivated="ediv.z=1" @activated="ediv.z=2" @resizestop="(...args) => updateVal(args, drid)" @dragstop="(...args) => updateVal(args, drid)">
       <h3 class="ediv_title" :style="ediv.style.title" @click="ediv.maximized ? null : (ediv.z=2)">
@@ -58,6 +58,7 @@ export default {
       },
       script: '',
       draglist: { },
+      dirty: false,
     }
   },
   computed: {
@@ -135,7 +136,15 @@ export default {
         }
       })
     }
-    this.restoreMinimized()
+    this.restoreAll()
+  },
+  mounted() {
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
+    window.addEventListener('beforeunload', this.onBeforeUnload)
+  },
+  beforeUnmount() {
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
+    window.removeEventListener('beforeunload', this.onBeforeUnload)
   },
   watch: {
     script(code){
@@ -172,6 +181,7 @@ export default {
       evui.minimized = false
       evui.maximized = false
       this.draglist[id] = evui
+      this.dirty = evui.persist !== false
       if (reqMaximized) this.evMaximize(id)
     },
     evMaximize(id) {
@@ -188,10 +198,18 @@ export default {
       Object.assign(item, item.prev, { maximized: false })
       delete item.prev
     },
-    persistMinimized() {
+    markDirty() {
+      this.dirty = true
+    },
+    persistAll() {
+      if (!this.dirty) return
       const data = {}
-      for (const [id, item] of Object.entries(this.draglist)) {
-        if (!item.minimized) continue
+      const entries = Object.entries(this.draglist)
+      // 只保留最新的 10 个窗口
+      const latest = entries.slice(-10)
+      for (const [id, item] of latest) {
+        // content 大于 20KB 直接丢弃
+        if (item.content && this.$sString(item.content).length > 20 * 1024) continue
         data[id] = {
           title: item.title,
           top: item.top,
@@ -208,24 +226,25 @@ export default {
           cbdata: item.cbdata,
           cblabel: item.cblabel,
           cbhint: item.cbhint,
+          minimized: item.minimized,
+          maximized: item.maximized,
         }
       }
       const hasData = Object.keys(data).length > 0
       const req = hasData
-        ? { type: 'save', data: { key: '.evui_minimized', value: { type: 'object', value: data } } }
-        : { type: 'delete', data: '.evui_minimized' }
+        ? { type: 'save', data: { key: '.evui_all', value: { type: 'object', value: data } } }
+        : { type: 'delete', data: '.evui_all' }
       this.$axios.put('/store', req).then(res=>{
-        if (!hasData || res.data.rescode === 0) {
-          !hasData && this.$message.success('.evui_minimized 已从 store 常量删除')
-        } else {
-          this.$message.error('evui 最小化窗口保存到 store 常量失败', res.data.message)
+        if (hasData && res.data.rescode !== 0) {
+          this.$message.error('evui 窗口保存到 store 常量失败', res.data.message)
         }
       }).catch(e=>{
-        this.$message.error('evui 最小化窗口保存到 store 常量失败', e && e.message)
+        this.$message.error('evui 窗口保存到 store 常量失败', e && e.message)
       })
+      this.dirty = false
     },
-    restoreMinimized() {
-      this.$axios.get('/store/.evui_minimized').then(res=>{
+    restoreAll() {
+      this.$axios.get('/store/.evui_all').then(res=>{
         let store
         try {
           const parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
@@ -236,10 +255,19 @@ export default {
         for (const id of Object.keys(store)) {
           if (this.draglist[id]) continue
           this.neweu({ id, ...store[id] })
-          this.draglist[id].minimized = true
-          this.draglist[id].active = false
+          if (store[id].minimized) {
+            this.draglist[id].minimized = true
+            this.draglist[id].active = false
+          }
         }
+        this.dirty = false
       }).catch(()=>{})
+    },
+    onVisibilityChange() {
+      if (document.hidden) this.persistAll()
+    },
+    onBeforeUnload() {
+      this.persistAll()
     },
     evMinimize(id) {
       const item = this.draglist[id]
@@ -248,7 +276,7 @@ export default {
         item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
       }
       item.minimized = true
-      this.persistMinimized()
+      this.markDirty()
     },
     evRestoreMinimized(id) {
       const item = this.draglist[id]
@@ -260,7 +288,7 @@ export default {
       }
       item.active = true
       item.z = 2
-      this.persistMinimized()
+      this.markDirty()
     },
     evRemove(id){
       if (!id) {
@@ -268,12 +296,11 @@ export default {
         return
       }
       if (this.draglist[id]) {
-        const wasMinimized = this.draglist[id].minimized
         if (this.draglist[id].type !== 'local' && this.$wsrecv && this.$wsrecv.connected) {
           this.$wsrecv.send(id, 'close')
         }
         delete this.draglist[id]
-        if (wasMinimized) this.persistMinimized()
+        this.markDirty()
       }
     },
     cbsubmit(id){

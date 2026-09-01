@@ -163,6 +163,7 @@ export default {
           width: 900,
           height: 600,
           resizable: true,
+          draggable: true,
           style: {
             content: 'padding: 0;'
           },
