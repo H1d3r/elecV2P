@@ -59,6 +59,7 @@ export default {
       script: '',
       draglist: { },
       dirty: false,
+      maxZ: 2,
     }
   },
   computed: {
@@ -180,6 +181,8 @@ export default {
       if (evui.script) this.script = evui.script
       evui.minimized = false
       evui.maximized = false
+      evui.z = ++this.maxZ
+      evui.active = true
       this.draglist[id] = evui
       this.dirty = evui.persist !== false
       if (reqMaximized) this.evMaximize(id)
@@ -197,6 +200,8 @@ export default {
       if (!item || !item.prev) return
       Object.assign(item, item.prev, { maximized: false })
       delete item.prev
+      item.z = ++this.maxZ
+      item.active = true
     },
     markDirty() {
       this.dirty = true
@@ -276,6 +281,7 @@ export default {
         item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
       }
       item.minimized = true
+      item.active = false
       this.markDirty()
     },
     evRestoreMinimized(id) {
@@ -286,8 +292,8 @@ export default {
         Object.assign(item, item.prev)
         delete item.prev
       }
+      item.z = ++this.maxZ
       item.active = true
-      item.z = 2
       this.markDirty()
     },
     evRemove(id){
