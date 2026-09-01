@@ -4143,7 +4143,8 @@ $fend('start', (data) => {
     retryLeft = MAX_RETRY  // fresh budget for the new model
     activeModel = next
     send('model', { model: next, removed: reason === 'removed' })  // keep frontend model selector in sync
-    const why = reason === 'removed' ? (gone + ' removed') : (reason === 'switch' ? (gone + ' switching') : (gone + ' retries exhausted'))
+    const shortErr = (etxt || '').split('\n')[0].slice(0, 120) || reason
+    const why = reason === 'removed' ? (gone + ' removed') : (gone + ' ' + shortErr)
     sendRef('↻ ' + why + ' · switching to ' + next + ' (' + (MAX_SWITCH - switchLeft) + '/' + MAX_SWITCH + ')', 'info')
     retrying = true
     kickWatchdog()
