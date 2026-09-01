@@ -26,7 +26,7 @@
     <keep-alive>
       <component :is="currentpanel" @menunav="menunav" @theme="themeApply" />
     </keep-alive>
-    <div class="pi-efh-btn" v-if="piEfhShow" @click="openPiEfh" @contextmenu.prevent="hidePiEfh" title="点击打开 Pi-Agent 界面，右键关闭"><svg class="pi-efh-icon" viewBox="0 0 470 470" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M0 0H352.07V234.71H234.71V352.07H117.36V469.43H0V0ZM117.36 117.36V234.71H234.71V117.36H117.36Z"></path><path fill="currentColor" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"></path></svg></div>
+    <div class="pi-efh-btn" v-if="piEfhShow" @click="openPiEfh" @contextmenu.prevent="hidePiEfh" title="点击打开 Pi-Agent 界面，拖拽可移动按钮位置，右键关闭" @mousedown="dragStart($event)" @touchstart="dragStart($event)"><svg class="pi-efh-icon" viewBox="0 0 470 470" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M0 0H352.07V234.71H234.71V352.07H117.36V469.43H0V0ZM117.36 117.36V234.71H234.71V117.36H117.36Z"></path><path fill="currentColor" d="M352.07 234.71H469.43V469.43H352.07V234.71Z"></path></svg></div>
   </section>
 </template>
 
@@ -60,6 +60,10 @@ export default {
       currentpanel: 'overview',
       islangzh: langset.locale.startsWith('zh'),
       piEfhShow: true,
+      piEfhPosition: null,
+      piEfhDragging: false,
+      piEfhMouseStart: null,
+      piEfhJustDragged: false,
       menulist: {
         overview: Object.create(null),
         task: Object.create(null),
@@ -274,6 +278,10 @@ export default {
       this.logo_src = this.$uApi.hashToLogo(this.$uApi.store.get('userid'), this.logo_name, 4)
     },
     openPiEfh(){
+      if (this.piEfhJustDragged) {
+        this.piEfhJustDragged = false
+        return
+      }
       this.$evui({
         id: 'eapp_efh_pi',
         title: 'Pi-Agent',
@@ -294,7 +302,86 @@ export default {
         this.$message.success('Pi-Agent 入口按钮已隐藏（清除 localStorage 中 piEfhShow 可恢复）')
       }
     },
-  }
+    dragStart(event){
+      if (event.button !== 0 && event.type !== 'touchstart') return
+      if (this.piEfhDragging) return
+      this.piEfhDragging = true
+      this.piEfhJustDragged = false
+      const touch = event.touches && event.touches[0]
+      this.piEfhMouseStart = {
+        x: touch ? touch.clientX : event.clientX,
+        y: touch ? touch.clientY : event.clientY
+      }
+      const btnRect = this.$el.querySelector('.pi-efh-btn').getBoundingClientRect()
+      this.piEfhPosition = {
+        left: btnRect.left,
+        top: btnRect.top,
+        width: btnRect.width,
+        height: btnRect.height
+      }
+      document.addEventListener('mousemove', this.dragMove)
+      document.addEventListener('mouseup', this.dragEnd)
+      document.addEventListener('touchmove', this.dragMove, { passive: false })
+      document.addEventListener('touchend', this.dragEnd)
+      event.preventDefault()
+    },
+    dragMove(event){
+      if (!this.piEfhDragging || !this.piEfhPosition) return
+      const touch = event.touches && event.touches[0]
+      const clientX = touch ? touch.clientX : event.clientX
+      const clientY = touch ? touch.clientY : event.clientY
+      const dx = clientX - this.piEfhMouseStart.x
+      const dy = clientY - this.piEfhMouseStart.y
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      this.piEfhJustDragged = true
+      const root = this.$el
+      const rootRect = root.getBoundingClientRect()
+      let newLeft = this.piEfhPosition.left + dx
+      let newTop = this.piEfhPosition.top + dy
+      newLeft = Math.max(0, Math.min(newLeft, rootRect.width - this.piEfhPosition.width))
+      newTop = Math.max(0, Math.min(newTop, rootRect.height - this.piEfhPosition.height))
+      root.style.setProperty('--pi-efh-right', 'auto')
+      root.style.setProperty('--pi-efh-bottom', 'auto')
+      root.style.setProperty('--pi-efh-left', newLeft + 'px')
+      root.style.setProperty('--pi-efh-top', newTop + 'px')
+    },
+    dragEnd(){
+      if (!this.piEfhDragging) return
+      this.piEfhDragging = false
+      document.removeEventListener('mousemove', this.dragMove)
+      document.removeEventListener('mouseup', this.dragEnd)
+      document.removeEventListener('touchmove', this.dragMove)
+      document.removeEventListener('touchend', this.dragEnd)
+      if (this.piEfhPosition) {
+        const btnRect = this.$el.querySelector('.pi-efh-btn').getBoundingClientRect()
+        try {
+          localStorage.setItem('piEfhPosition', JSON.stringify({
+            left: btnRect.left,
+            top: btnRect.top
+          }))
+        } catch(e) {}
+      }
+      this.piEfhPosition = null
+      this.piEfhMouseStart = null
+    },
+    restorePiEfhPosition(){
+      let stored = null
+      try {
+        const s = localStorage.getItem('piEfhPosition')
+        if (s) stored = JSON.parse(s)
+      } catch(e) {}
+      const root = this.$el
+      if (stored && stored.left !== undefined && stored.top !== undefined) {
+        root.style.setProperty('--pi-efh-left', stored.left + 'px')
+        root.style.setProperty('--pi-efh-top', stored.top + 'px')
+        root.style.setProperty('--pi-efh-right', 'auto')
+        root.style.setProperty('--pi-efh-bottom', 'auto')
+      }
+    },
+  },
+  mounted(){
+    this.restorePiEfhPosition()
+  },
 };
 </script>
 
@@ -471,8 +558,10 @@ export default {
 }
 .pi-efh-btn {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: var(--pi-efh-bottom, 20px);
+  right: var(--pi-efh-right, 20px);
+  left: var(--pi-efh-left, auto);
+  top: var(--pi-efh-top, auto);
   width: 48px;
   height: 48px;
   background: var(--main-bk);
@@ -489,6 +578,7 @@ export default {
   transition: opacity .2s, transform .2s;
   z-index: 10;
   user-select: none;
+  -webkit-app-region: no-drag;
 }
 
 .pi-efh-icon {
