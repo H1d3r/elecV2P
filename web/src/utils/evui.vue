@@ -276,7 +276,7 @@ export default {
     },
     evMinimize(id) {
       const item = this.draglist[id]
-      if (!item) return
+      if (!item || item.minimized) return
       if (!item.prev) {
         item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
       }

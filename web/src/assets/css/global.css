@@ -952,6 +952,8 @@ noscript {
   pointer-events: auto;
   background-color: var(--main-cl);
   background-image: linear-gradient(110deg,var(--secd-fc) 25%,transparent 0),linear-gradient(315deg,transparent 30%,var(--tras-bk) 30%),linear-gradient(45deg,transparent 66%,var(--secd-bk) 0),linear-gradient(333deg,var(--icon-bk) 53%,transparent 0);
+  transform-origin: 50% 50%;
+  transition: opacity .28s ease-in, transform .3s cubic-bezier(.34,1.56,.64,1);
 }
 
 .ediv.active {
@@ -959,7 +961,9 @@ noscript {
 }
 
 .ediv--minimized {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.08);
 }
 
 .ediv.active:before {
@@ -1152,7 +1156,7 @@ noscript {
 }
 
 .evui_dock_item:hover .evui_dock_iconwrap {
-  transform: translateY(-8px) scale(1.18);
+  transform: translateY(-8px) scale(1.22);
 }
 
 .evui_dock_item:hover .evui_dock_icon {
