@@ -953,7 +953,6 @@ noscript {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  transition: all 0.2s;
 }
 
 .ediv {
@@ -970,7 +969,8 @@ noscript {
   background-color: var(--main-cl);
   background-image: linear-gradient(110deg,var(--secd-fc) 25%,transparent 0),linear-gradient(315deg,transparent 30%,var(--tras-bk) 30%),linear-gradient(45deg,transparent 66%,var(--secd-bk) 0),linear-gradient(333deg,var(--icon-bk) 53%,transparent 0);
   transform-origin: 50% 50%;
-  transition: opacity .28s ease-in, transform .3s cubic-bezier(.34,1.56,.64,1);
+  transition: opacity .28s ease-in;
+  will-change: transform;
 }
 
 .ediv.active {
@@ -981,6 +981,11 @@ noscript {
   opacity: 0;
   pointer-events: none;
   transform: scale(0.08);
+}
+
+.ediv.dragging,
+.ediv.resizing {
+  transition: none;
 }
 
 .ediv.active:before {
@@ -997,12 +1002,14 @@ noscript {
   font-size: 22px;
   border-radius: 8px 8px 0 0;
   background: var(--main-bk);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .ediv_content {
   position: relative;
-  display: block;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   border-radius: 0 0 8px 8px;
   white-space: pre-wrap;
