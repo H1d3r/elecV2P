@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="evui">
-    <VueDragResize v-for="(ediv, drid) in displayList" :key="drid" className="ediv" dragHandle=".ediv_title--name" :parent="true" :prevent-deactivation="false" :active="ediv.active" :w="ediv.width" :h="ediv.height" :x="ediv.left" :y="ediv.top" :z="ediv.z" :resizable="ediv.resizable" :draggable="ediv.draggable" :maxWidth="evMaxW" :maxHeight="evMaxH" :handles="['tl','tr','bl','br']" :lock-aspect-ratio="false" :class="{ 'ediv--minimized': ediv.minimized, 'ediv--maximized': ediv.maximized }" @deactivated="ediv.z=1" @activated="ediv.z=2" @resizeStop="(...args) => updateVal(args, drid)" @dragStop="(...args) => updateVal(args, drid)">
+    <VueDragResize v-for="(ediv, drid) in displayList" :key="drid" className="ediv" dragHandle=".ediv_title--name" :parent="true" :prevent-deactivation="false" :active="ediv.active" :w="ediv.width" :h="ediv.height" :x="ediv.left" :y="ediv.top" :z="ediv.z" :resizable="ediv.resizable" :draggable="ediv.draggable" :maxWidth="evMaxW" :maxHeight="evMaxH" :handles="['tl','tr','bl','br']" :lock-aspect-ratio="false" :class="{ 'ediv--minimized': ediv.minimized, 'ediv--maximized': ediv.maximized && !ediv.minimized }" @deactivated="ediv.z=1" @activated="ediv.z=2" @resizeStop="(...args) => updateVal(args, drid)" @dragStop="(...args) => updateVal(args, drid)">
       <h3 class="ediv_title" :style="ediv.style.title" @click="ediv.maximized ? null : (ediv.z=2)">
         <span class="ediv_title--name" :title="drid">{{ ediv.title }}</span>
         <span class="ediv_title--minimize" @click="evMinimize(drid)" :title="$t('minimize')"><i class="ediv_btn_icon ediv_btn_icon--min"></i></span>
@@ -310,10 +310,9 @@ export default {
       const item = this.draglist[id]
       if (!item || item.minimized) return
       if (!item.prev) {
-        item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable }
+        item.prev = { top: item.top, left: item.left, width: item.width, height: item.height, z: item.z, resizable: item.resizable, draggable: item.draggable, maximized: !!item.maximized }
       }
       item.minimized = true
-      item.maximized = false
       item.active = false
       this.markDirty()
     },
@@ -328,11 +327,17 @@ export default {
       const item = this.draglist[id]
       if (!item) return
       item.minimized = false
+      const wasMaximized = item.prev && item.prev.maximized
       if (item.prev && !item.maximized) {
         Object.assign(item, item.prev)
         delete item.prev
       }
-      item.z = ++this.maxZ
+      // 如果最小化前是最大化状态，调用 evMaximize 重新进入全屏
+      if (wasMaximized) {
+        this.evMaximize(id)
+      } else {
+        item.z = ++this.maxZ
+      }
       item.active = true
       this.markDirty()
     },
